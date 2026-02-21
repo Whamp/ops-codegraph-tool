@@ -186,7 +186,7 @@ program
 program
   .command('embed [dir]')
   .description('Build semantic embeddings for all functions/methods/classes (requires prior `build`)')
-  .option('-m, --model <name>', 'Embedding model: minilm (default), jina-small, jina-base, nomic. Run `codegraph models` for details', 'minilm')
+  .option('-m, --model <name>', 'Embedding model: minilm (default), jina-small, jina-base, jina-code, nomic, nomic-v1.5, bge-large. Run `codegraph models` for details', 'minilm')
   .action(async (dir, opts) => {
     const root = path.resolve(dir || '.');
     await buildEmbeddings(root, opts.model);

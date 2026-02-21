@@ -30,16 +30,34 @@ export const MODELS = {
     desc: 'Good quality (~137MB). General text, 8192 token context.',
     quantized: false
   },
+  'jina-code': {
+    name: 'Xenova/jina-embeddings-v2-base-code',
+    dim: 768,
+    desc: 'Code-aware (~137MB). Trained on code+text, best for code search.',
+    quantized: false
+  },
   'nomic': {
     name: 'Xenova/nomic-embed-text-v1',
     dim: 768,
-    desc: 'Best local quality (~137MB). 8192 context, beats OpenAI ada-002.',
+    desc: 'Good local quality (~137MB). 8192 context.',
+    quantized: false
+  },
+  'nomic-v1.5': {
+    name: 'nomic-ai/nomic-embed-text-v1.5',
+    dim: 768,
+    desc: 'Improved nomic (~137MB). Matryoshka dimensions, 8192 context.',
+    quantized: false
+  },
+  'bge-large': {
+    name: 'Xenova/bge-large-en-v1.5',
+    dim: 1024,
+    desc: 'Best general retrieval (~335MB). Top MTEB scores.',
     quantized: false
   }
 };
 
 export const DEFAULT_MODEL = 'minilm';
-const BATCH_SIZE_MAP = { 'minilm': 32, 'jina-small': 16, 'jina-base': 8, 'nomic': 8 };
+const BATCH_SIZE_MAP = { 'minilm': 32, 'jina-small': 16, 'jina-base': 8, 'jina-code': 8, 'nomic': 8, 'nomic-v1.5': 8, 'bge-large': 4 };
 const DEFAULT_BATCH_SIZE = 32;
 
 function getModelConfig(modelKey) {

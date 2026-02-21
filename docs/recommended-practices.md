@@ -250,7 +250,8 @@ Build embeddings first (one-time):
 
 ```bash
 codegraph embed                          # ~23 MB model, fast
-codegraph embed --model nomic            # ~137 MB, best quality
+codegraph embed --model jina-code        # ~137 MB, best for code search
+codegraph embed --model bge-large        # ~335 MB, best general retrieval
 ```
 
 ### Multi-query search
