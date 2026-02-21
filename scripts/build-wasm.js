@@ -28,6 +28,9 @@ const grammars = [
   { name: 'tree-sitter-tsx', pkg: 'tree-sitter-typescript', sub: 'tsx' },
   { name: 'tree-sitter-python', pkg: 'tree-sitter-python', sub: null },
   { name: 'tree-sitter-hcl', pkg: '@tree-sitter-grammars/tree-sitter-hcl', sub: null },
+  { name: 'tree-sitter-go', pkg: 'tree-sitter-go', sub: null },
+  { name: 'tree-sitter-rust', pkg: 'tree-sitter-rust', sub: null },
+  { name: 'tree-sitter-java', pkg: 'tree-sitter-java', sub: null },
 ];
 
 for (const g of grammars) {

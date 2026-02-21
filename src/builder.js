@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { createHash } from 'crypto';
 import { openDb, initSchema } from './db.js';
-import { createParsers, getParser, extractSymbols, extractHCLSymbols, extractPythonSymbols } from './parser.js';
+import { createParsers, getParser, extractSymbols, extractHCLSymbols, extractPythonSymbols, extractGoSymbols, extractRustSymbols, extractJavaSymbols } from './parser.js';
 import { IGNORE_DIRS, EXTENSIONS, normalizePath } from './constants.js';
 import { loadConfig } from './config.js';
 import { warn, debug, info } from './logger.js';
@@ -297,8 +297,14 @@ export async function buildGraph(rootDir, opts = {}) {
       const relPath = normalizePath(path.relative(rootDir, filePath));
       const isHCL = filePath.endsWith('.tf') || filePath.endsWith('.hcl');
       const isPython = filePath.endsWith('.py');
+      const isGo = filePath.endsWith('.go');
+      const isRust = filePath.endsWith('.rs');
+      const isJava = filePath.endsWith('.java');
       const symbols = isHCL ? extractHCLSymbols(tree, filePath)
         : isPython ? extractPythonSymbols(tree, filePath)
+        : isGo ? extractGoSymbols(tree, filePath)
+        : isRust ? extractRustSymbols(tree, filePath)
+        : isJava ? extractJavaSymbols(tree, filePath)
         : extractSymbols(tree, filePath);
       fileSymbols.set(relPath, symbols);
 

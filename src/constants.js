@@ -8,7 +8,8 @@ export const IGNORE_DIRS = new Set([
 
 export const EXTENSIONS = new Set([
   '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
-  '.tf', '.hcl', '.py'
+  '.tf', '.hcl', '.py',
+  '.go', '.rs', '.java'
 ]);
 
 export function shouldIgnore(dirName) {

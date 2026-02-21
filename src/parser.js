@@ -48,7 +48,34 @@ export async function createParsers() {
     warn(`Python parser failed to initialize: ${e.message}. Python files will be skipped.`);
   }
 
-  return { jsParser, tsParser, tsxParser, hclParser, pyParser };
+  let goParser = null;
+  try {
+    const Go = await Language.load(grammarPath('tree-sitter-go.wasm'));
+    goParser = new Parser();
+    goParser.setLanguage(Go);
+  } catch (e) {
+    warn(`Go parser failed to initialize: ${e.message}. Go files will be skipped.`);
+  }
+
+  let rustParser = null;
+  try {
+    const Rust = await Language.load(grammarPath('tree-sitter-rust.wasm'));
+    rustParser = new Parser();
+    rustParser.setLanguage(Rust);
+  } catch (e) {
+    warn(`Rust parser failed to initialize: ${e.message}. Rust files will be skipped.`);
+  }
+
+  let javaParser = null;
+  try {
+    const Java = await Language.load(grammarPath('tree-sitter-java.wasm'));
+    javaParser = new Parser();
+    javaParser.setLanguage(Java);
+  } catch (e) {
+    warn(`Java parser failed to initialize: ${e.message}. Java files will be skipped.`);
+  }
+
+  return { jsParser, tsParser, tsxParser, hclParser, pyParser, goParser, rustParser, javaParser };
 }
 
 export function getParser(parsers, filePath) {
@@ -59,6 +86,9 @@ export function getParser(parsers, filePath) {
   if (filePath.endsWith('.py') && parsers.pyParser) return parsers.pyParser;
   if ((filePath.endsWith('.tf') || filePath.endsWith('.hcl')) && parsers.hclParser)
     return parsers.hclParser;
+  if (filePath.endsWith('.go') && parsers.goParser) return parsers.goParser;
+  if (filePath.endsWith('.rs') && parsers.rustParser) return parsers.rustParser;
+  if (filePath.endsWith('.java') && parsers.javaParser) return parsers.javaParser;
   return null;
 }
 
@@ -566,6 +596,458 @@ export function extractPythonSymbols(tree, filePath) {
       current = current.parent;
     }
     return null;
+  }
+
+  walk(tree.rootNode);
+  return { definitions, calls, imports, classes, exports };
+}
+
+/**
+ * Extract symbols from Go files.
+ */
+export function extractGoSymbols(tree, filePath) {
+  const definitions = [];
+  const calls = [];
+  const imports = [];
+  const classes = [];
+  const exports = [];
+
+  function walk(node) {
+    switch (node.type) {
+      case 'function_declaration': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          definitions.push({ name: nameNode.text, kind: 'function', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+        }
+        break;
+      }
+
+      case 'method_declaration': {
+        const nameNode = node.childForFieldName('name');
+        const receiver = node.childForFieldName('receiver');
+        if (nameNode) {
+          let receiverType = null;
+          if (receiver) {
+            // receiver is a parameter_list like (r *Foo) or (r Foo)
+            for (let i = 0; i < receiver.childCount; i++) {
+              const param = receiver.child(i);
+              if (!param) continue;
+              const typeNode = param.childForFieldName('type');
+              if (typeNode) {
+                receiverType = typeNode.type === 'pointer_type'
+                  ? typeNode.text.replace(/^\*/, '')
+                  : typeNode.text;
+                break;
+              }
+            }
+          }
+          const fullName = receiverType ? `${receiverType}.${nameNode.text}` : nameNode.text;
+          definitions.push({ name: fullName, kind: 'method', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+        }
+        break;
+      }
+
+      case 'type_declaration': {
+        for (let i = 0; i < node.childCount; i++) {
+          const spec = node.child(i);
+          if (!spec || spec.type !== 'type_spec') continue;
+          const nameNode = spec.childForFieldName('name');
+          const typeNode = spec.childForFieldName('type');
+          if (nameNode && typeNode) {
+            if (typeNode.type === 'struct_type') {
+              definitions.push({ name: nameNode.text, kind: 'class', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+            } else if (typeNode.type === 'interface_type') {
+              definitions.push({ name: nameNode.text, kind: 'interface', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+              for (let j = 0; j < typeNode.childCount; j++) {
+                const member = typeNode.child(j);
+                if (member && member.type === 'method_elem') {
+                  const methName = member.childForFieldName('name');
+                  if (methName) {
+                    definitions.push({ name: `${nameNode.text}.${methName.text}`, kind: 'method', line: member.startPosition.row + 1, endLine: member.endPosition.row + 1 });
+                  }
+                }
+              }
+            } else {
+              definitions.push({ name: nameNode.text, kind: 'type', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+            }
+          }
+        }
+        break;
+      }
+
+      case 'import_declaration': {
+        for (let i = 0; i < node.childCount; i++) {
+          const child = node.child(i);
+          if (!child) continue;
+          if (child.type === 'import_spec') {
+            const pathNode = child.childForFieldName('path');
+            if (pathNode) {
+              const importPath = pathNode.text.replace(/"/g, '');
+              const nameNode = child.childForFieldName('name');
+              const alias = nameNode ? nameNode.text : importPath.split('/').pop();
+              imports.push({ source: importPath, names: [alias], line: child.startPosition.row + 1, goImport: true });
+            }
+          }
+          if (child.type === 'import_spec_list') {
+            for (let j = 0; j < child.childCount; j++) {
+              const spec = child.child(j);
+              if (spec && spec.type === 'import_spec') {
+                const pathNode = spec.childForFieldName('path');
+                if (pathNode) {
+                  const importPath = pathNode.text.replace(/"/g, '');
+                  const nameNode = spec.childForFieldName('name');
+                  const alias = nameNode ? nameNode.text : importPath.split('/').pop();
+                  imports.push({ source: importPath, names: [alias], line: spec.startPosition.row + 1, goImport: true });
+                }
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      case 'call_expression': {
+        const fn = node.childForFieldName('function');
+        if (fn) {
+          if (fn.type === 'identifier') {
+            calls.push({ name: fn.text, line: node.startPosition.row + 1 });
+          } else if (fn.type === 'selector_expression') {
+            const field = fn.childForFieldName('field');
+            if (field) calls.push({ name: field.text, line: node.startPosition.row + 1 });
+          }
+        }
+        break;
+      }
+    }
+
+    for (let i = 0; i < node.childCount; i++) walk(node.child(i));
+  }
+
+  walk(tree.rootNode);
+  return { definitions, calls, imports, classes, exports };
+}
+
+/**
+ * Extract symbols from Rust files.
+ */
+export function extractRustSymbols(tree, filePath) {
+  const definitions = [];
+  const calls = [];
+  const imports = [];
+  const classes = [];
+  const exports = [];
+
+  function findCurrentImpl(node) {
+    let current = node.parent;
+    while (current) {
+      if (current.type === 'impl_item') {
+        const typeNode = current.childForFieldName('type');
+        return typeNode ? typeNode.text : null;
+      }
+      current = current.parent;
+    }
+    return null;
+  }
+
+  function walk(node) {
+    switch (node.type) {
+      case 'function_item': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          const implType = findCurrentImpl(node);
+          const fullName = implType ? `${implType}.${nameNode.text}` : nameNode.text;
+          const kind = implType ? 'method' : 'function';
+          definitions.push({ name: fullName, kind, line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+        }
+        break;
+      }
+
+      case 'struct_item': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          definitions.push({ name: nameNode.text, kind: 'class', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+        }
+        break;
+      }
+
+      case 'enum_item': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          definitions.push({ name: nameNode.text, kind: 'class', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+        }
+        break;
+      }
+
+      case 'trait_item': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          definitions.push({ name: nameNode.text, kind: 'interface', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+          const body = node.childForFieldName('body');
+          if (body) {
+            for (let i = 0; i < body.childCount; i++) {
+              const child = body.child(i);
+              if (child && (child.type === 'function_signature_item' || child.type === 'function_item')) {
+                const methName = child.childForFieldName('name');
+                if (methName) {
+                  definitions.push({ name: `${nameNode.text}.${methName.text}`, kind: 'method', line: child.startPosition.row + 1, endLine: child.endPosition.row + 1 });
+                }
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      case 'impl_item': {
+        const typeNode = node.childForFieldName('type');
+        const traitNode = node.childForFieldName('trait');
+        if (typeNode && traitNode) {
+          classes.push({ name: typeNode.text, implements: traitNode.text, line: node.startPosition.row + 1 });
+        }
+        break;
+      }
+
+      case 'use_declaration': {
+        const argNode = node.child(1);
+        if (argNode) {
+          const usePaths = extractRustUsePath(argNode);
+          for (const imp of usePaths) {
+            imports.push({ source: imp.source, names: imp.names, line: node.startPosition.row + 1, rustUse: true });
+          }
+        }
+        break;
+      }
+
+      case 'call_expression': {
+        const fn = node.childForFieldName('function');
+        if (fn) {
+          if (fn.type === 'identifier') {
+            calls.push({ name: fn.text, line: node.startPosition.row + 1 });
+          } else if (fn.type === 'field_expression') {
+            const field = fn.childForFieldName('field');
+            if (field) calls.push({ name: field.text, line: node.startPosition.row + 1 });
+          } else if (fn.type === 'scoped_identifier') {
+            const name = fn.childForFieldName('name');
+            if (name) calls.push({ name: name.text, line: node.startPosition.row + 1 });
+          }
+        }
+        break;
+      }
+
+      case 'macro_invocation': {
+        const macroNode = node.child(0);
+        if (macroNode) {
+          calls.push({ name: macroNode.text + '!', line: node.startPosition.row + 1 });
+        }
+        break;
+      }
+    }
+
+    for (let i = 0; i < node.childCount; i++) walk(node.child(i));
+  }
+
+  walk(tree.rootNode);
+  return { definitions, calls, imports, classes, exports };
+}
+
+function extractRustUsePath(node) {
+  if (!node) return [];
+
+  if (node.type === 'use_list') {
+    const results = [];
+    for (let i = 0; i < node.childCount; i++) {
+      results.push(...extractRustUsePath(node.child(i)));
+    }
+    return results;
+  }
+
+  if (node.type === 'scoped_use_list') {
+    const pathNode = node.childForFieldName('path');
+    const listNode = node.childForFieldName('list');
+    const prefix = pathNode ? pathNode.text : '';
+    if (listNode) {
+      const names = [];
+      for (let i = 0; i < listNode.childCount; i++) {
+        const child = listNode.child(i);
+        if (child && (child.type === 'identifier' || child.type === 'use_as_clause' || child.type === 'self')) {
+          const name = child.type === 'use_as_clause'
+            ? (child.childForFieldName('alias') || child.childForFieldName('name'))?.text
+            : child.text;
+          if (name) names.push(name);
+        }
+      }
+      return [{ source: prefix, names }];
+    }
+    return [{ source: prefix, names: [] }];
+  }
+
+  if (node.type === 'use_as_clause') {
+    const name = node.childForFieldName('alias') || node.childForFieldName('name');
+    return [{ source: node.text, names: name ? [name.text] : [] }];
+  }
+
+  if (node.type === 'use_wildcard') {
+    const pathNode = node.childForFieldName('path');
+    return [{ source: pathNode ? pathNode.text : '*', names: ['*'] }];
+  }
+
+  if (node.type === 'scoped_identifier' || node.type === 'identifier') {
+    const text = node.text;
+    const lastName = text.split('::').pop();
+    return [{ source: text, names: [lastName] }];
+  }
+
+  return [];
+}
+
+/**
+ * Extract symbols from Java files.
+ */
+export function extractJavaSymbols(tree, filePath) {
+  const definitions = [];
+  const calls = [];
+  const imports = [];
+  const classes = [];
+  const exports = [];
+
+  function findJavaParentClass(node) {
+    let current = node.parent;
+    while (current) {
+      if (current.type === 'class_declaration' || current.type === 'enum_declaration' || current.type === 'interface_declaration') {
+        const nameNode = current.childForFieldName('name');
+        return nameNode ? nameNode.text : null;
+      }
+      current = current.parent;
+    }
+    return null;
+  }
+
+  function walk(node) {
+    switch (node.type) {
+      case 'class_declaration': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          definitions.push({ name: nameNode.text, kind: 'class', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+
+          const superclass = node.childForFieldName('superclass');
+          if (superclass) {
+            for (let i = 0; i < superclass.childCount; i++) {
+              const child = superclass.child(i);
+              if (child && (child.type === 'type_identifier' || child.type === 'identifier' || child.type === 'generic_type')) {
+                const superName = child.type === 'generic_type' ? child.child(0)?.text : child.text;
+                if (superName) classes.push({ name: nameNode.text, extends: superName, line: node.startPosition.row + 1 });
+                break;
+              }
+            }
+          }
+
+          const interfaces = node.childForFieldName('interfaces');
+          if (interfaces) {
+            for (let i = 0; i < interfaces.childCount; i++) {
+              const child = interfaces.child(i);
+              if (child && (child.type === 'type_identifier' || child.type === 'identifier' || child.type === 'type_list' || child.type === 'generic_type')) {
+                if (child.type === 'type_list') {
+                  for (let j = 0; j < child.childCount; j++) {
+                    const t = child.child(j);
+                    if (t && (t.type === 'type_identifier' || t.type === 'identifier' || t.type === 'generic_type')) {
+                      const ifaceName = t.type === 'generic_type' ? t.child(0)?.text : t.text;
+                      if (ifaceName) classes.push({ name: nameNode.text, implements: ifaceName, line: node.startPosition.row + 1 });
+                    }
+                  }
+                } else {
+                  const ifaceName = child.type === 'generic_type' ? child.child(0)?.text : child.text;
+                  if (ifaceName) classes.push({ name: nameNode.text, implements: ifaceName, line: node.startPosition.row + 1 });
+                }
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      case 'interface_declaration': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          definitions.push({ name: nameNode.text, kind: 'interface', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+          const body = node.childForFieldName('body');
+          if (body) {
+            for (let i = 0; i < body.childCount; i++) {
+              const child = body.child(i);
+              if (child && child.type === 'method_declaration') {
+                const methName = child.childForFieldName('name');
+                if (methName) {
+                  definitions.push({ name: `${nameNode.text}.${methName.text}`, kind: 'method', line: child.startPosition.row + 1, endLine: child.endPosition.row + 1 });
+                }
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      case 'enum_declaration': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          definitions.push({ name: nameNode.text, kind: 'class', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+        }
+        break;
+      }
+
+      case 'method_declaration': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          const parentClass = findJavaParentClass(node);
+          const fullName = parentClass ? `${parentClass}.${nameNode.text}` : nameNode.text;
+          definitions.push({ name: fullName, kind: 'method', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+        }
+        break;
+      }
+
+      case 'constructor_declaration': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          const parentClass = findJavaParentClass(node);
+          const fullName = parentClass ? `${parentClass}.${nameNode.text}` : nameNode.text;
+          definitions.push({ name: fullName, kind: 'method', line: node.startPosition.row + 1, endLine: nodeEndLine(node) });
+        }
+        break;
+      }
+
+      case 'import_declaration': {
+        for (let i = 0; i < node.childCount; i++) {
+          const child = node.child(i);
+          if (child && (child.type === 'scoped_identifier' || child.type === 'identifier')) {
+            const fullPath = child.text;
+            const lastName = fullPath.split('.').pop();
+            imports.push({ source: fullPath, names: [lastName], line: node.startPosition.row + 1, javaImport: true });
+          }
+          if (child && child.type === 'asterisk') {
+            const lastImport = imports[imports.length - 1];
+            if (lastImport) lastImport.names = ['*'];
+          }
+        }
+        break;
+      }
+
+      case 'method_invocation': {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) {
+          calls.push({ name: nameNode.text, line: node.startPosition.row + 1 });
+        }
+        break;
+      }
+
+      case 'object_creation_expression': {
+        const typeNode = node.childForFieldName('type');
+        if (typeNode) {
+          const typeName = typeNode.type === 'generic_type' ? typeNode.child(0)?.text : typeNode.text;
+          if (typeName) calls.push({ name: typeName, line: node.startPosition.row + 1 });
+        }
+        break;
+      }
+    }
+
+    for (let i = 0; i < node.childCount; i++) walk(node.child(i));
   }
 
   walk(tree.rootNode);
