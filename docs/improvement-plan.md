@@ -90,16 +90,15 @@ Keep `LANGUAGE_REGISTRY` in `parser.js` but import extractors from the new files
 - Each extractor becomes independently testable
 - Aligns with Rust codebase structure
 
-#### 4. Clean up stale registry entries
+#### ~~4. Clean up stale registry entries~~ FIXED
 **Found by:** `codegraph registry list` (30+ dead temp dir entries)
 
-Integration tests register temp directories that are never cleaned up. The registry grows unbounded.
-
-**Action:**
-- Add `registry prune` command (or make existing `pruneRegistry` accessible via CLI) to remove entries with missing DBs
-- Add `afterAll` cleanup in integration test fixtures
-- Consider adding a TTL or auto-prune on `registry list`
-- Optionally: skip registry for paths under `$TMPDIR`/`os.tmpdir()`
+All action items resolved:
+- `codegraph registry prune --ttl <days>` CLI command (default 30 days)
+- `afterAll` cleanup in integration tests (`skipRegistry: true` for direct calls, `pruneRegistry()` for CLI tests)
+- Auto-prune on `registry list` (CLI) and `list_repos` (MCP)
+- Temp directory paths under `os.tmpdir()` are skipped during auto-registration
+- `lastAccessedAt` tracked on registry entries; TTL-based expiry removes idle entries
 
 #### 5. Improve search relevance for own codebase
 **Found by:** `codegraph search "build dependency graph"` — top results were Rust extractors' `walk_node`, not `buildGraph`
@@ -115,12 +114,10 @@ The search query "build dependency graph" should rank `buildGraph` (src/builder.
 
 ### P2 — Medium priority (next 2-3 releases)
 
-#### 6. Guard `git diff` in non-repo contexts
+#### ~~6. Guard `git diff` in non-repo contexts~~ FIXED
 **Found by:** Test output noise from `diff-impact` tests
 
-When `diff-impact` runs in a non-git directory (e.g., temp dirs during tests), `git diff` prints its full usage help to stderr. This is noisy but doesn't fail tests.
-
-**Action:** Check for `.git` directory or run `git rev-parse --git-dir` before calling `git diff`. Return a clear error message instead of letting git dump its help text.
+Fixed: `diffImpactData` now traverses up from `repoRoot` checking for `.git` via `fs.existsSync` before calling `git diff`. Returns `{ error: "Not a git repository: ..." }` for non-git dirs. Stderr suppressed with `stdio: ['pipe','pipe','pipe']`.
 
 #### 7. Add a `codegraph stats` command
 **Found by:** Dogfooding — no single command shows graph health overview
@@ -175,16 +172,16 @@ Add an optional CI step that runs `codegraph embed` + `codegraph search` against
 | `cycles` | Works (0 file-level, 1 function-level) |
 | `map` | Works (correct ranking with WASM) |
 | `query` | Works |
-| `deps` | Works with WASM; broken with native (fixed with JS workaround) |
-| `impact` | Works with WASM; broken with native (fixed with JS workaround) |
+| `deps` | Works (both engines — native path normalization fixed) |
+| `impact` | Works (both engines — native path normalization fixed) |
 | `fn` / `fn-impact` | Works |
 | `diff-impact` | Works |
 | `export` (dot/mermaid/json) | Works |
 | `embed` | Works (310 symbols embedded) |
 | `search` | Works (single + multi-query) |
 | `models` | Works |
-| `registry` | Works (but polluted with dead entries) |
-| `--version` | Fixed (was 1.3.0, now reads from package.json) |
+| `registry` | Works (auto-prune + TTL keeps it clean) |
+| `--version` | Works (reads from package.json dynamically) |
 | Lint (biome) | Clean after format |
 
 ---
