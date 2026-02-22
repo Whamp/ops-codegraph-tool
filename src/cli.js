@@ -222,7 +222,35 @@ program
   .description('Watch project for file changes and incrementally update the graph')
   .action(async (dir) => {
     const root = path.resolve(dir || '.');
-    await watchProject(root);
+    const engine = program.opts().engine;
+    await watchProject(root, { engine });
+  });
+
+program
+  .command('info')
+  .description('Show codegraph engine info and diagnostics')
+  .action(async () => {
+    const { isNativeAvailable, loadNative } = await import('./native.js');
+    const { getActiveEngine } = await import('./parser.js');
+
+    const engine = program.opts().engine;
+    const { name: activeName, version: activeVersion } = getActiveEngine({ engine });
+    const nativeAvailable = isNativeAvailable();
+
+    console.log('\nCodegraph Diagnostics');
+    console.log('====================');
+    console.log(`  Version       : ${program.version()}`);
+    console.log(`  Node.js       : ${process.version}`);
+    console.log(`  Platform      : ${process.platform}-${process.arch}`);
+    console.log(`  Native engine : ${nativeAvailable ? 'available' : 'unavailable'}`);
+    if (nativeAvailable) {
+      const native = loadNative();
+      const nativeVersion = typeof native.engineVersion === 'function' ? native.engineVersion() : 'unknown';
+      console.log(`  Native version: ${nativeVersion}`);
+    }
+    console.log(`  Engine flag   : --engine ${engine}`);
+    console.log(`  Active engine : ${activeName}${activeVersion ? ` (v${activeVersion})` : ''}`);
+    console.log();
   });
 
 program.parse();

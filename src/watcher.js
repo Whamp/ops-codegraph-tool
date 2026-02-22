@@ -119,7 +119,7 @@ async function updateFile(db, rootDir, filePath, stmts, engineOpts, cache) {
   };
 }
 
-export async function watchProject(rootDir) {
+export async function watchProject(rootDir, opts = {}) {
   const dbPath = path.join(rootDir, '.codegraph', 'graph.db');
   if (!fs.existsSync(dbPath)) {
     console.error('No graph.db found. Run `codegraph build` first.');
@@ -128,7 +128,7 @@ export async function watchProject(rootDir) {
 
   const db = openDb(dbPath);
   initSchema(db);
-  const engineOpts = { engine: 'auto' };
+  const engineOpts = { engine: opts.engine || 'auto' };
   const { name: engineName, version: engineVersion } = getActiveEngine(engineOpts);
   console.log(`Watch mode using ${engineName} engine${engineVersion ? ` (v${engineVersion})` : ''}`);
 
