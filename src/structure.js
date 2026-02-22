@@ -326,7 +326,7 @@ export function hotspotsData(customDbPath, opts = {}) {
       FROM nodes n
       JOIN node_metrics nm ON n.id = nm.node_id
       WHERE n.kind = ?
-      ORDER BY ${orderCol} DESC
+      ORDER BY ${orderCol} DESC NULLS LAST
       LIMIT ?
     `)
     .all(kind, limit);
