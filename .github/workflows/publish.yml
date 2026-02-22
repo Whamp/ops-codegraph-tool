@@ -121,6 +121,7 @@ jobs:
       - name: Bump version
         id: version
         run: |
+          git checkout -- package-lock.json
           npm version ${{ inputs.version }} -m "release: v%s"
           echo "new_version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
