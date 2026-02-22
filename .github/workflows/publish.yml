@@ -175,9 +175,9 @@ jobs:
 
             echo "Publishing ${pkg_name}@${VERSION}"
             if [ "${{ inputs.dry-run }}" = "true" ]; then
-              npm publish "./pkg/$platform" --access public --dry-run
+              npm publish "./pkg/$platform" --access public --provenance --dry-run
             else
-              npm publish "./pkg/$platform" --access public
+              npm publish "./pkg/$platform" --access public --provenance
             fi
           done
 
