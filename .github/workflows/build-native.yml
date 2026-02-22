@@ -53,6 +53,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/codegraph-core
+
       - name: Install napi-rs CLI
         run: npm install -g @napi-rs/cli
 
@@ -67,31 +72,29 @@ jobs:
           mkdir -p "$PKG_DIR"
 
           # Find the built .node file
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            NODE_FILE=$(find crates/codegraph-core -name "*.node" | head -1)
-          else
-            NODE_FILE=$(find crates/codegraph-core -name "*.node" | head -1)
-          fi
-
+          NODE_FILE=$(find crates/codegraph-core -name "*.node" | head -1)
           cp "$NODE_FILE" "$PKG_DIR/codegraph-core.node"
 
+          # Read version from root package.json
+          VERSION=$(node -p "require('./package.json').version")
+
           # Generate package.json for the platform package
-          cat > "$PKG_DIR/package.json" << EOF
-          {
-            "name": "${{ matrix.package }}",
-            "version": "0.1.0",
-            "description": "Native codegraph-core binary for ${{ matrix.node-os }}-${{ matrix.node-arch }}",
-            "os": ["${{ matrix.node-os }}"],
-            "cpu": ["${{ matrix.node-arch }}"],
-            "main": "codegraph-core.node",
-            "files": ["codegraph-core.node"],
-            "license": "Apache-2.0",
-            "repository": {
-              "type": "git",
-              "url": "https://github.com/optave/codegraph.git"
-            }
-          }
-          EOF
+          cat > "$PKG_DIR/package.json" <<EOF
+{
+  "name": "${{ matrix.package }}",
+  "version": "${VERSION}",
+  "description": "Native codegraph-core binary for ${{ matrix.node-os }}-${{ matrix.node-arch }}",
+  "os": ["${{ matrix.node-os }}"],
+  "cpu": ["${{ matrix.node-arch }}"],
+  "main": "codegraph-core.node",
+  "files": ["codegraph-core.node"],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/optave/codegraph.git"
+  }
+}
+EOF
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
