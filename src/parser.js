@@ -1731,3 +1731,30 @@ export function getActiveEngine(opts = {}) {
   const version = native ? (typeof native.engineVersion === 'function' ? native.engineVersion() : null) : null;
   return { name, version };
 }
+
+/**
+ * Create a native ParseTreeCache for incremental parsing.
+ * Returns null if the native engine is unavailable (WASM fallback).
+ */
+export function createParseTreeCache() {
+  const native = loadNative();
+  if (!native || !native.ParseTreeCache) return null;
+  return new native.ParseTreeCache();
+}
+
+/**
+ * Parse a file incrementally using the cache, or fall back to full parse.
+ *
+ * @param {object|null} cache  ParseTreeCache instance (or null for full parse)
+ * @param {string} filePath    Absolute path to the file
+ * @param {string} source      Source code string
+ * @param {object} [opts]      Options forwarded to parseFileAuto on fallback
+ * @returns {Promise<{definitions, calls, imports, classes, exports}|null>}
+ */
+export async function parseFileIncremental(cache, filePath, source, opts = {}) {
+  if (cache) {
+    const result = cache.parseFile(filePath, source);
+    return result ? normalizeNativeSymbols(result) : null;
+  }
+  return parseFileAuto(filePath, source, opts);
+}

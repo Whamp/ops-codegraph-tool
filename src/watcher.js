@@ -2,7 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import { openDb, initSchema } from './db.js';
-import { parseFileAuto, getActiveEngine } from './parser.js';
+import { parseFileIncremental, createParseTreeCache, getActiveEngine } from './parser.js';
 import { IGNORE_DIRS, EXTENSIONS, normalizePath } from './constants.js';
 import { resolveImportPath } from './builder.js';
 import { warn, debug, info } from './logger.js';
@@ -19,7 +19,7 @@ function isTrackedExt(filePath) {
 /**
  * Parse a single file and update the database incrementally.
  */
-async function updateFile(db, rootDir, filePath, stmts, engineOpts) {
+async function updateFile(db, rootDir, filePath, stmts, engineOpts, cache) {
   const relPath = normalizePath(path.relative(rootDir, filePath));
 
   const oldNodes = stmts.countNodes.get(relPath)?.c || 0;
@@ -29,6 +29,7 @@ async function updateFile(db, rootDir, filePath, stmts, engineOpts) {
   stmts.deleteNodes.run(relPath);
 
   if (!fs.existsSync(filePath)) {
+    if (cache) cache.remove(filePath);
     return { file: relPath, nodesAdded: 0, nodesRemoved: oldNodes, edgesAdded: 0, deleted: true };
   }
 
@@ -39,7 +40,7 @@ async function updateFile(db, rootDir, filePath, stmts, engineOpts) {
     return null;
   }
 
-  const symbols = await parseFileAuto(filePath, code, engineOpts);
+  const symbols = await parseFileIncremental(cache, filePath, code, engineOpts);
   if (!symbols) return null;
 
   stmts.insertNode.run(relPath, 'file', relPath, 0, null);
@@ -131,6 +132,9 @@ export async function watchProject(rootDir) {
   const { name: engineName, version: engineVersion } = getActiveEngine(engineOpts);
   console.log(`Watch mode using ${engineName} engine${engineVersion ? ` (v${engineVersion})` : ''}`);
 
+  const cache = createParseTreeCache();
+  console.log(cache ? 'Incremental parsing enabled (native tree cache)' : 'Incremental parsing unavailable (full re-parse)');
+
   const stmts = {
     insertNode: db.prepare('INSERT OR IGNORE INTO nodes (name, kind, file, line, end_line) VALUES (?, ?, ?, ?, ?)'),
     getNodeId: db.prepare('SELECT id FROM nodes WHERE name = ? AND kind = ? AND file = ? AND line = ?'),
@@ -159,7 +163,7 @@ export async function watchProject(rootDir) {
 
     const results = [];
     for (const filePath of files) {
-      const result = await updateFile(db, rootDir, filePath, stmts, engineOpts);
+      const result = await updateFile(db, rootDir, filePath, stmts, engineOpts, cache);
       if (result) results.push(result);
     }
     const updates = results;
@@ -193,6 +197,7 @@ export async function watchProject(rootDir) {
   process.on('SIGINT', () => {
     console.log('\nStopping watcher...');
     watcher.close();
+    if (cache) cache.clear();
     db.close();
     process.exit(0);
   });

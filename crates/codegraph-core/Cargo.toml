@@ -24,6 +24,7 @@ tree-sitter-ruby = "0.23"
 tree-sitter-php = { version = "0.23", features = ["php"] }
 tree-sitter-hcl = "0.4"
 rayon = "1"
+send_wrapper = "0.6"
 
 [build-dependencies]
 napi-build = "2"
