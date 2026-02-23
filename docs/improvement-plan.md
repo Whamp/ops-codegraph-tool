@@ -109,12 +109,10 @@ Currently you need to run `map`, `cycles`, and read build output separately to a
 - Top 5 coupling hotspots
 - Embedding status (model, count, staleness)
 
-#### 8. Improve map command ranking
+#### ~~8. Improve map command ranking~~ FIXED
 **Found by:** `codegraph map --limit 20` (WASM build)
 
-When Rust files are parsed, the map is dominated by Rust extractor files (all with `inEdges: 1, outEdges: 0`). The ranking should prioritize files with meaningful import relationships over files with only `contains` edges.
-
-**Action:** Weight import/reexport edges higher than `contains` edges in the `map` ranking algorithm. Consider filtering out files below a minimum edge threshold.
+Fixed: `moduleMapData` SQL now excludes `contains` edges from `inEdges`/`outEdges` counts and ranking (`AND kind != 'contains'`). Files with only structural `contains` edges (e.g. Rust extractor files) no longer dominate the map. `stats.totalEdges` remains the raw total for graph size indication.
 
 #### 9. builder.js fan-out reduction
 **Found by:** `codegraph map` (fan-out 7, highest in codebase)
