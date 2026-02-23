@@ -10,6 +10,38 @@ function isTestFile(filePath) {
   return TEST_PATTERN.test(filePath);
 }
 
+export const FALSE_POSITIVE_NAMES = new Set([
+  'run',
+  'get',
+  'set',
+  'init',
+  'start',
+  'handle',
+  'main',
+  'new',
+  'create',
+  'update',
+  'delete',
+  'process',
+  'execute',
+  'call',
+  'apply',
+  'setup',
+  'render',
+  'build',
+  'load',
+  'save',
+  'find',
+  'make',
+  'open',
+  'close',
+  'reset',
+  'send',
+  'read',
+  'write',
+]);
+export const FALSE_POSITIVE_CALLER_THRESHOLD = 20;
+
 const FUNCTION_KINDS = ['function', 'method', 'class'];
 export const ALL_SYMBOL_KINDS = [
   'function',
@@ -198,8 +230,9 @@ export function queryNameData(name, customDbPath) {
   return { query: name, results };
 }
 
-export function impactAnalysisData(file, customDbPath) {
+export function impactAnalysisData(file, customDbPath, opts = {}) {
   const db = openReadonlyOrFail(customDbPath);
+  const noTests = opts.noTests || false;
   const fileNodes = db
     .prepare(`SELECT * FROM nodes WHERE file LIKE ? AND kind = 'file'`)
     .all(`%${file}%`);
@@ -228,7 +261,7 @@ export function impactAnalysisData(file, customDbPath) {
     `)
       .all(current);
     for (const dep of dependents) {
-      if (!visited.has(dep.id)) {
+      if (!visited.has(dep.id) && (!noTests || !isTestFile(dep.file))) {
         visited.add(dep.id);
         queue.push(dep.id);
         levels.set(dep.id, level + 1);
@@ -253,8 +286,17 @@ export function impactAnalysisData(file, customDbPath) {
   };
 }
 
-export function moduleMapData(customDbPath, limit = 20) {
+export function moduleMapData(customDbPath, limit = 20, opts = {}) {
   const db = openReadonlyOrFail(customDbPath);
+  const noTests = opts.noTests || false;
+
+  const testFilter = noTests
+    ? `AND n.file NOT LIKE '%.test.%'
+      AND n.file NOT LIKE '%.spec.%'
+      AND n.file NOT LIKE '%__test__%'
+      AND n.file NOT LIKE '%__tests__%'
+      AND n.file NOT LIKE '%.stories.%'`
+    : '';
 
   const nodes = db
     .prepare(`
@@ -263,9 +305,7 @@ export function moduleMapData(customDbPath, limit = 20) {
       (SELECT COUNT(*) FROM edges WHERE target_id = n.id AND kind != 'contains') as in_edges
     FROM nodes n
     WHERE n.kind = 'file'
-      AND n.file NOT LIKE '%.test.%'
-      AND n.file NOT LIKE '%.spec.%'
-      AND n.file NOT LIKE '%__test__%'
+      ${testFilter}
     ORDER BY (SELECT COUNT(*) FROM edges WHERE target_id = n.id AND kind != 'contains') DESC
     LIMIT ?
   `)
@@ -286,8 +326,9 @@ export function moduleMapData(customDbPath, limit = 20) {
   return { limit, topNodes, stats: { totalFiles, totalNodes, totalEdges } };
 }
 
-export function fileDepsData(file, customDbPath) {
+export function fileDepsData(file, customDbPath, opts = {}) {
   const db = openReadonlyOrFail(customDbPath);
+  const noTests = opts.noTests || false;
   const fileNodes = db
     .prepare(`SELECT * FROM nodes WHERE file LIKE ? AND kind = 'file'`)
     .all(`%${file}%`);
@@ -297,19 +338,21 @@ export function fileDepsData(file, customDbPath) {
   }
 
   const results = fileNodes.map((fn) => {
-    const importsTo = db
+    let importsTo = db
       .prepare(`
       SELECT n.file, e.kind as edge_kind FROM edges e JOIN nodes n ON e.target_id = n.id
       WHERE e.source_id = ? AND e.kind IN ('imports', 'imports-type')
     `)
       .all(fn.id);
+    if (noTests) importsTo = importsTo.filter((i) => !isTestFile(i.file));
 
-    const importedBy = db
+    let importedBy = db
       .prepare(`
       SELECT n.file, e.kind as edge_kind FROM edges e JOIN nodes n ON e.source_id = n.id
       WHERE e.target_id = ? AND e.kind IN ('imports', 'imports-type')
     `)
       .all(fn.id);
+    if (noTests) importedBy = importedBy.filter((i) => !isTestFile(i.file));
 
     const defs = db
       .prepare(`SELECT * FROM nodes WHERE file = ? AND kind != 'file' ORDER BY line`)
@@ -753,6 +796,67 @@ export function statsData(customDbPath) {
     /* embeddings table may not exist */
   }
 
+  // Graph quality metrics
+  const totalCallable = db
+    .prepare("SELECT COUNT(*) as c FROM nodes WHERE kind IN ('function', 'method')")
+    .get().c;
+  const callableWithCallers = db
+    .prepare(`
+      SELECT COUNT(DISTINCT e.target_id) as c FROM edges e
+      JOIN nodes n ON e.target_id = n.id
+      WHERE e.kind = 'calls' AND n.kind IN ('function', 'method')
+    `)
+    .get().c;
+  const callerCoverage = totalCallable > 0 ? callableWithCallers / totalCallable : 0;
+
+  const totalCallEdges = db.prepare("SELECT COUNT(*) as c FROM edges WHERE kind = 'calls'").get().c;
+  const highConfCallEdges = db
+    .prepare("SELECT COUNT(*) as c FROM edges WHERE kind = 'calls' AND confidence >= 0.7")
+    .get().c;
+  const callConfidence = totalCallEdges > 0 ? highConfCallEdges / totalCallEdges : 0;
+
+  // False-positive warnings: generic names with > threshold callers
+  const fpRows = db
+    .prepare(`
+      SELECT n.name, n.file, n.line, COUNT(e.source_id) as caller_count
+      FROM nodes n
+      LEFT JOIN edges e ON n.id = e.target_id AND e.kind = 'calls'
+      WHERE n.kind IN ('function', 'method')
+      GROUP BY n.id
+      HAVING caller_count > ?
+      ORDER BY caller_count DESC
+    `)
+    .all(FALSE_POSITIVE_CALLER_THRESHOLD);
+  const falsePositiveWarnings = fpRows
+    .filter((r) =>
+      FALSE_POSITIVE_NAMES.has(r.name.includes('.') ? r.name.split('.').pop() : r.name),
+    )
+    .map((r) => ({ name: r.name, file: r.file, line: r.line, callerCount: r.caller_count }));
+
+  // Edges from suspicious nodes
+  let fpEdgeCount = 0;
+  for (const fp of falsePositiveWarnings) fpEdgeCount += fp.callerCount;
+  const falsePositiveRatio = totalCallEdges > 0 ? fpEdgeCount / totalCallEdges : 0;
+
+  const score = Math.round(
+    callerCoverage * 40 + callConfidence * 40 + (1 - falsePositiveRatio) * 20,
+  );
+
+  const quality = {
+    score,
+    callerCoverage: {
+      ratio: callerCoverage,
+      covered: callableWithCallers,
+      total: totalCallable,
+    },
+    callConfidence: {
+      ratio: callConfidence,
+      highConf: highConfCallEdges,
+      total: totalCallEdges,
+    },
+    falsePositiveWarnings,
+  };
+
   db.close();
   return {
     nodes: { total: totalNodes, byKind: nodesByKind },
@@ -761,6 +865,7 @@ export function statsData(customDbPath) {
     cycles: { fileLevel: fileCycles.length, functionLevel: fnCycles.length },
     hotspots,
     embeddings,
+    quality,
   };
 }
 
@@ -837,6 +942,26 @@ export function stats(customDbPath, opts = {}) {
     console.log('\nEmbeddings: not built');
   }
 
+  // Quality
+  if (data.quality) {
+    const q = data.quality;
+    const cc = q.callerCoverage;
+    const cf = q.callConfidence;
+    console.log(`\nGraph Quality: ${q.score}/100`);
+    console.log(
+      `  Caller coverage:  ${(cc.ratio * 100).toFixed(1)}% (${cc.covered}/${cc.total} functions have >=1 caller)`,
+    );
+    console.log(
+      `  Call confidence:  ${(cf.ratio * 100).toFixed(1)}% (${cf.highConf}/${cf.total} call edges are high-confidence)`,
+    );
+    if (q.falsePositiveWarnings.length > 0) {
+      console.log('  False-positive warnings:');
+      for (const fp of q.falsePositiveWarnings) {
+        console.log(`    ! ${fp.name} (${fp.callerCount} callers) -- ${fp.file}:${fp.line}`);
+      }
+    }
+  }
+
   console.log();
 }
 
@@ -873,7 +998,7 @@ export function queryName(name, customDbPath, opts = {}) {
 }
 
 export function impactAnalysis(file, customDbPath, opts = {}) {
-  const data = impactAnalysisData(file, customDbPath);
+  const data = impactAnalysisData(file, customDbPath, { noTests: opts.noTests });
   if (opts.json) {
     console.log(JSON.stringify(data, null, 2));
     return;
@@ -904,7 +1029,7 @@ export function impactAnalysis(file, customDbPath, opts = {}) {
 }
 
 export function moduleMap(customDbPath, limit = 20, opts = {}) {
-  const data = moduleMapData(customDbPath, limit);
+  const data = moduleMapData(customDbPath, limit, { noTests: opts.noTests });
   if (opts.json) {
     console.log(JSON.stringify(data, null, 2));
     return;
@@ -932,7 +1057,7 @@ export function moduleMap(customDbPath, limit = 20, opts = {}) {
 }
 
 export function fileDeps(file, customDbPath, opts = {}) {
-  const data = fileDepsData(file, customDbPath);
+  const data = fileDepsData(file, customDbPath, { noTests: opts.noTests });
   if (opts.json) {
     console.log(JSON.stringify(data, null, 2));
     return;
@@ -1693,6 +1818,157 @@ export function explain(target, customDbPath, opts = {}) {
       console.log();
     }
   }
+}
+
+// ─── whereData ──────────────────────────────────────────────────────────
+
+function whereSymbolImpl(db, target, noTests) {
+  const placeholders = ALL_SYMBOL_KINDS.map(() => '?').join(', ');
+  let nodes = db
+    .prepare(
+      `SELECT * FROM nodes WHERE name LIKE ? AND kind IN (${placeholders}) ORDER BY file, line`,
+    )
+    .all(`%${target}%`, ...ALL_SYMBOL_KINDS);
+  if (noTests) nodes = nodes.filter((n) => !isTestFile(n.file));
+
+  return nodes.map((node) => {
+    const crossFileCallers = db
+      .prepare(
+        `SELECT COUNT(*) as cnt FROM edges e JOIN nodes n ON e.source_id = n.id
+         WHERE e.target_id = ? AND e.kind = 'calls' AND n.file != ?`,
+      )
+      .get(node.id, node.file);
+    const exported = crossFileCallers.cnt > 0;
+
+    let uses = db
+      .prepare(
+        `SELECT n.name, n.file, n.line FROM edges e JOIN nodes n ON e.source_id = n.id
+         WHERE e.target_id = ? AND e.kind = 'calls'`,
+      )
+      .all(node.id);
+    if (noTests) uses = uses.filter((u) => !isTestFile(u.file));
+
+    return {
+      name: node.name,
+      kind: node.kind,
+      file: node.file,
+      line: node.line,
+      exported,
+      uses: uses.map((u) => ({ name: u.name, file: u.file, line: u.line })),
+    };
+  });
+}
+
+function whereFileImpl(db, target, _noTests) {
+  const fileNodes = db
+    .prepare(`SELECT * FROM nodes WHERE file LIKE ? AND kind = 'file'`)
+    .all(`%${target}%`);
+  if (fileNodes.length === 0) return [];
+
+  return fileNodes.map((fn) => {
+    const symbols = db
+      .prepare(`SELECT * FROM nodes WHERE file = ? AND kind != 'file' ORDER BY line`)
+      .all(fn.file);
+
+    const imports = db
+      .prepare(
+        `SELECT n.file FROM edges e JOIN nodes n ON e.target_id = n.id
+         WHERE e.source_id = ? AND e.kind IN ('imports', 'imports-type')`,
+      )
+      .all(fn.id)
+      .map((r) => r.file);
+
+    const importedBy = db
+      .prepare(
+        `SELECT n.file FROM edges e JOIN nodes n ON e.source_id = n.id
+         WHERE e.target_id = ? AND e.kind IN ('imports', 'imports-type')`,
+      )
+      .all(fn.id)
+      .map((r) => r.file);
+
+    const exportedIds = new Set(
+      db
+        .prepare(
+          `SELECT DISTINCT e.target_id FROM edges e
+           JOIN nodes caller ON e.source_id = caller.id
+           JOIN nodes target ON e.target_id = target.id
+           WHERE target.file = ? AND caller.file != ? AND e.kind = 'calls'`,
+        )
+        .all(fn.file, fn.file)
+        .map((r) => r.target_id),
+    );
+
+    const exported = symbols.filter((s) => exportedIds.has(s.id)).map((s) => s.name);
+
+    return {
+      file: fn.file,
+      symbols: symbols.map((s) => ({ name: s.name, kind: s.kind, line: s.line })),
+      imports,
+      importedBy,
+      exported,
+    };
+  });
+}
+
+export function whereData(target, customDbPath, opts = {}) {
+  const db = openReadonlyOrFail(customDbPath);
+  const noTests = opts.noTests || false;
+  const fileMode = opts.file || false;
+
+  const results = fileMode
+    ? whereFileImpl(db, target, noTests)
+    : whereSymbolImpl(db, target, noTests);
+
+  db.close();
+  return { target, mode: fileMode ? 'file' : 'symbol', results };
+}
+
+export function where(target, customDbPath, opts = {}) {
+  const data = whereData(target, customDbPath, opts);
+  if (opts.json) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  if (data.results.length === 0) {
+    console.log(
+      data.mode === 'file'
+        ? `No file matching "${target}" in graph`
+        : `No symbol matching "${target}" in graph`,
+    );
+    return;
+  }
+
+  if (data.mode === 'symbol') {
+    for (const r of data.results) {
+      const tag = r.exported ? '  (exported)' : '';
+      console.log(`\n${kindIcon(r.kind)} ${r.name}  ${r.file}:${r.line}${tag}`);
+      if (r.uses.length > 0) {
+        const useStrs = r.uses.map((u) => `${u.file}:${u.line}`);
+        console.log(`  Used in: ${useStrs.join(', ')}`);
+      } else {
+        console.log('  No uses found');
+      }
+    }
+  } else {
+    for (const r of data.results) {
+      console.log(`\n# ${r.file}`);
+      if (r.symbols.length > 0) {
+        const symStrs = r.symbols.map((s) => `${s.name}:${s.line}`);
+        console.log(`  Symbols: ${symStrs.join(', ')}`);
+      }
+      if (r.imports.length > 0) {
+        console.log(`  Imports: ${r.imports.join(', ')}`);
+      }
+      if (r.importedBy.length > 0) {
+        console.log(`  Imported by: ${r.importedBy.join(', ')}`);
+      }
+      if (r.exported.length > 0) {
+        console.log(`  Exported: ${r.exported.join(', ')}`);
+      }
+    }
+  }
+  console.log();
 }
 
 export function fnImpact(name, customDbPath, opts = {}) {

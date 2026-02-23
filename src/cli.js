@@ -22,6 +22,7 @@ import {
   moduleMap,
   queryName,
   stats,
+  where,
 } from './queries.js';
 import {
   listRepos,
@@ -184,6 +185,22 @@ program
   .option('-j, --json', 'Output as JSON')
   .action((target, opts) => {
     explain(target, opts.db, { noTests: !opts.tests, json: opts.json });
+  });
+
+program
+  .command('where [name]')
+  .description('Find where a symbol is defined and used (minimal, fast lookup)')
+  .option('-d, --db <path>', 'Path to graph.db')
+  .option('-f, --file <path>', 'File overview: list symbols, imports, exports')
+  .option('-T, --no-tests', 'Exclude test/spec files')
+  .option('-j, --json', 'Output as JSON')
+  .action((name, opts) => {
+    if (!name && !opts.file) {
+      console.error('Provide a symbol name or use --file <path>');
+      process.exit(1);
+    }
+    const target = opts.file || name;
+    where(target, opts.db, { file: !!opts.file, noTests: !opts.tests, json: opts.json });
   });
 
 program

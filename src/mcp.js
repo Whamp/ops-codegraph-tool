@@ -170,6 +170,24 @@ const BASE_TOOLS = [
     },
   },
   {
+    name: 'where',
+    description:
+      'Find where a symbol is defined and used, or list symbols/imports/exports for a file. Minimal, fast lookup.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', description: 'Symbol name or file path' },
+        file_mode: {
+          type: 'boolean',
+          description: 'Treat target as file path (list symbols/imports/exports)',
+          default: false,
+        },
+        no_tests: { type: 'boolean', description: 'Exclude test files', default: false },
+      },
+      required: ['target'],
+    },
+  },
+  {
     name: 'diff_impact',
     description: 'Analyze git diff to find which functions changed and their transitive callers',
     inputSchema: {
@@ -341,6 +359,7 @@ export async function startMCPServer(customDbPath, options = {}) {
     fnImpactData,
     contextData,
     explainData,
+    whereData,
     diffImpactData,
     listFunctionsData,
   } = await import('./queries.js');
@@ -435,6 +454,12 @@ export async function startMCPServer(customDbPath, options = {}) {
           break;
         case 'explain':
           result = explainData(args.target, dbPath, { noTests: args.no_tests });
+          break;
+        case 'where':
+          result = whereData(args.target, dbPath, {
+            file: args.file_mode,
+            noTests: args.no_tests,
+          });
           break;
         case 'diff_impact':
           result = diffImpactData(dbPath, {

@@ -160,7 +160,7 @@ describe('impactAnalysisData', () => {
 describe('moduleMapData', () => {
   test('returns files with connectivity info', () => {
     const data = moduleMapData(dbPath);
-    expect(data.topNodes.length).toBe(4);
+    expect(data.topNodes.length).toBe(5);
     expect(data.stats.totalFiles).toBe(5);
     for (const node of data.topNodes) {
       expect(node).toHaveProperty('file');
@@ -254,6 +254,46 @@ describe('fnDepsData', () => {
     expect(r.callees.map((c) => c.name)).toContain('authenticate');
     expect(r.callees.map((c) => c.name)).toContain('validateToken');
     expect(r.callers.map((c) => c.name)).toContain('handleRoute');
+  });
+
+  test('exact match ranks above substring match', () => {
+    const data = fnDepsData('authenticate', dbPath);
+    const names = data.results.map((r) => r.name);
+    // 'authenticate' is exact (100), 'preAuthenticate' is substring (10)
+    expect(names).toContain('authenticate');
+    expect(names).toContain('preAuthenticate');
+    expect(names.indexOf('authenticate')).toBeLessThan(names.indexOf('preAuthenticate'));
+  });
+
+  test('prefix match returns multiple results', () => {
+    const data = fnDepsData('auth', dbPath);
+    const names = data.results.map((r) => r.name);
+    expect(names).toContain('authenticate');
+    expect(names).toContain('authMiddleware');
+  });
+
+  test('--file scopes to a single file', () => {
+    const data = fnDepsData('auth', dbPath, { file: 'auth.js' });
+    for (const r of data.results) {
+      expect(r.file).toContain('auth.js');
+    }
+    // authMiddleware is in middleware.js, should be excluded
+    const names = data.results.map((r) => r.name);
+    expect(names).not.toContain('authMiddleware');
+  });
+
+  test('--kind method filters to methods only', () => {
+    // All fixtures are functions, so filtering by method should return empty
+    const data = fnDepsData('auth', dbPath, { kind: 'method' });
+    expect(data.results).toHaveLength(0);
+  });
+
+  test('--file and --kind work together', () => {
+    const data = fnDepsData('auth', dbPath, { file: 'auth.js', kind: 'function' });
+    for (const r of data.results) {
+      expect(r.file).toContain('auth.js');
+      expect(r.kind).toBe('function');
+    }
   });
 });
 
@@ -390,6 +430,7 @@ describe('whereData', () => {
     const data = whereData('authenticate', dbPath);
     const r = data.results.find((r) => r.name === 'authenticate');
     expect(r).toBeDefined();
+    // authenticate is called from middleware.js (cross-file)
     expect(r.exported).toBe(true);
   });
 
@@ -419,6 +460,7 @@ describe('whereData', () => {
   test('file: exported list', () => {
     const data = whereData('middleware.js', dbPath, { file: true });
     const r = data.results[0];
+    // authMiddleware is called from routes.js (cross-file)
     expect(r.exported).toContain('authMiddleware');
   });
 
