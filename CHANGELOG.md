@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [2.1.0](https://github.com/optave/codegraph/compare/v2.0.0...v2.1.0) (2026-02-23)
+
+**Parser refactor, unified publish pipeline, and quality-of-life improvements.** This release splits the monolithic parser into per-language extractor files, consolidates the dev and stable publish workflows into a single pipeline, adds the `codegraph stats` command, and hardens native engine path handling and registry management.
+
+### Features
+
+* **cli:** add `codegraph stats` command for graph health overview — node/edge counts, language breakdown, staleness check ([12f89fa](https://github.com/optave/codegraph/commit/12f89fa))
+* **registry:** add TTL-based pruning for idle entries — stale repos auto-removed on access ([5e8c41b](https://github.com/optave/codegraph/commit/5e8c41b))
+* **ci:** consolidate dev + stable publish into a single `publish.yml` workflow with automatic channel detection ([bf1a16b](https://github.com/optave/codegraph/commit/bf1a16b))
+* **ci:** add embedding regression test with real ML model validation and dedicated weekly workflow ([5730a65](https://github.com/optave/codegraph/commit/5730a65))
+* **ci:** add worktree workflow hooks (`guard-git.sh`, `track-edits.sh`) for parallel session safety ([e16dfeb](https://github.com/optave/codegraph/commit/e16dfeb))
+
+### Bug Fixes
+
+* **hooks:** replace `jq` with `node` in hooks for Windows compatibility ([ac0b198](https://github.com/optave/codegraph/commit/ac0b198))
+* **native:** throw on explicit `--engine native` when addon is unavailable instead of silently falling back ([02b931d](https://github.com/optave/codegraph/commit/02b931d))
+* **native:** normalize import paths to remove `.` and `..` segments in native engine ([5394078](https://github.com/optave/codegraph/commit/5394078))
+* **native:** add JS-side `path.normalize()` defense-in-depth for native resolve ([e1222df](https://github.com/optave/codegraph/commit/e1222df))
+* **registry:** auto-prune stale entries and skip temp dir registration ([d0f3e97](https://github.com/optave/codegraph/commit/d0f3e97))
+* **tests:** isolate CLI tests from real registry via `CODEGRAPH_REGISTRY_PATH` env var ([dea0c3a](https://github.com/optave/codegraph/commit/dea0c3a))
+* **ci:** prevent publish crash on pre-existing tags ([6906448](https://github.com/optave/codegraph/commit/6906448))
+* **ci:** harden publish workflow version resolution ([1571f2a](https://github.com/optave/codegraph/commit/1571f2a))
+* **ci:** use PR-based version bumps to avoid pushing directly to protected main branch ([3aab964](https://github.com/optave/codegraph/commit/3aab964))
+
+### Refactoring
+
+* **parser:** split monolithic `parser.js` extractors into per-language files under `src/extractors/` ([92b2d23](https://github.com/optave/codegraph/commit/92b2d23))
+* **parser:** rename generic `walk` to language-specific names in all extractors ([6ed1f59](https://github.com/optave/codegraph/commit/6ed1f59))
+
+### Documentation
+
+* expand competitive analysis from 21 to 135+ tools ([0a679aa](https://github.com/optave/codegraph/commit/0a679aa))
+* add competitive analysis and foundation principles ([21a6708](https://github.com/optave/codegraph/commit/21a6708))
+* reposition around always-fresh graph + optional LLM enhancement ([a403acc](https://github.com/optave/codegraph/commit/a403acc))
+* add parallel sessions rules to CLAUDE.md ([1435803](https://github.com/optave/codegraph/commit/1435803))
+
 ## [2.0.0](https://github.com/optave/codegraph/compare/v1.4.0...v2.0.0) (2026-02-22)
 
 **Phase 2.5 — Multi-Repo MCP & Structural Analysis.** This release adds multi-repo support for AI agents, structural analysis with architectural metrics, and hardens security across the MCP server and SQL layers.
