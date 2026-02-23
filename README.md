@@ -380,10 +380,10 @@ Self-measured on every release via CI ([full history](generated/BENCHMARKS.md)):
 
 | Metric | Latest |
 |---|---|
-| Build speed (native) | **2.5 ms/file** |
-| Build speed (WASM) | **5 ms/file** |
+| Build speed (native) | **1.9 ms/file** |
+| Build speed (WASM) | **6.6 ms/file** |
 | Query time | **1ms** |
-| ~50,000 files (est.) | **~125.0s build** |
+| ~50,000 files (est.) | **~95.0s build** |
 
 Metrics are normalized per file for cross-version comparability. Times above are for a full initial build — incremental rebuilds only re-parse changed files.
 
