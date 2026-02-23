@@ -71,9 +71,10 @@ program
   .command('impact <file>')
   .description('Show what depends on this file (transitive)')
   .option('-d, --db <path>', 'Path to graph.db')
+  .option('-T, --no-tests', 'Exclude test/spec files')
   .option('-j, --json', 'Output as JSON')
   .action((file, opts) => {
-    impactAnalysis(file, opts.db, { json: opts.json });
+    impactAnalysis(file, opts.db, { noTests: !opts.tests, json: opts.json });
   });
 
 program
@@ -81,9 +82,10 @@ program
   .description('High-level module overview with most-connected nodes')
   .option('-d, --db <path>', 'Path to graph.db')
   .option('-n, --limit <number>', 'Number of top nodes', '20')
+  .option('-T, --no-tests', 'Exclude test/spec files')
   .option('-j, --json', 'Output as JSON')
   .action((opts) => {
-    moduleMap(opts.db, parseInt(opts.limit, 10), { json: opts.json });
+    moduleMap(opts.db, parseInt(opts.limit, 10), { noTests: !opts.tests, json: opts.json });
   });
 
 program
@@ -99,9 +101,10 @@ program
   .command('deps <file>')
   .description('Show what this file imports and what imports it')
   .option('-d, --db <path>', 'Path to graph.db')
+  .option('-T, --no-tests', 'Exclude test/spec files')
   .option('-j, --json', 'Output as JSON')
   .action((file, opts) => {
-    fileDeps(file, opts.db, { json: opts.json });
+    fileDeps(file, opts.db, { noTests: !opts.tests, json: opts.json });
   });
 
 program
@@ -444,6 +447,7 @@ program
   .option('-n, --limit <number>', 'Number of results', '10')
   .option('--metric <metric>', 'fan-in | fan-out | density | coupling', 'fan-in')
   .option('--level <level>', 'file | directory', 'file')
+  .option('-T, --no-tests', 'Exclude test/spec files')
   .option('-j, --json', 'Output as JSON')
   .action(async (opts) => {
     const { hotspotsData, formatHotspots } = await import('./structure.js');
@@ -451,6 +455,7 @@ program
       metric: opts.metric,
       level: opts.level,
       limit: parseInt(opts.limit, 10),
+      noTests: !opts.tests,
     });
     if (opts.json) {
       console.log(JSON.stringify(data, null, 2));
