@@ -234,10 +234,11 @@ program
   .option('-d, --db <path>', 'Path to graph.db')
   .option('-f, --format <format>', 'Output format: dot, mermaid, json', 'dot')
   .option('--functions', 'Function-level graph instead of file-level')
+  .option('-T, --no-tests', 'Exclude test/spec files')
   .option('-o, --output <file>', 'Write to file instead of stdout')
   .action((opts) => {
     const db = new Database(findDbPath(opts.db), { readonly: true });
-    const exportOpts = { fileLevel: !opts.functions };
+    const exportOpts = { fileLevel: !opts.functions, noTests: !opts.tests };
 
     let output;
     switch (opts.format) {
@@ -245,7 +246,7 @@ program
         output = exportMermaid(db, exportOpts);
         break;
       case 'json':
-        output = JSON.stringify(exportJSON(db), null, 2);
+        output = JSON.stringify(exportJSON(db, exportOpts), null, 2);
         break;
       default:
         output = exportDOT(db, exportOpts);
@@ -267,10 +268,11 @@ program
   .description('Detect circular dependencies in the codebase')
   .option('-d, --db <path>', 'Path to graph.db')
   .option('--functions', 'Function-level cycle detection')
+  .option('-T, --no-tests', 'Exclude test/spec files')
   .option('-j, --json', 'Output as JSON')
   .action((opts) => {
     const db = new Database(findDbPath(opts.db), { readonly: true });
-    const cycles = findCycles(db, { fileLevel: !opts.functions });
+    const cycles = findCycles(db, { fileLevel: !opts.functions, noTests: !opts.tests });
     db.close();
 
     if (opts.json) {
@@ -425,6 +427,7 @@ program
   .option('-d, --db <path>', 'Path to graph.db')
   .option('--depth <n>', 'Max directory depth')
   .option('--sort <metric>', 'Sort by: cohesion | fan-in | fan-out | density | files', 'files')
+  .option('-T, --no-tests', 'Exclude test/spec files')
   .option('-j, --json', 'Output as JSON')
   .action(async (dir, opts) => {
     const { structureData, formatStructure } = await import('./structure.js');
@@ -432,6 +435,7 @@ program
       directory: dir,
       depth: opts.depth ? parseInt(opts.depth, 10) : undefined,
       sort: opts.sort,
+      noTests: !opts.tests,
     });
     if (opts.json) {
       console.log(JSON.stringify(data, null, 2));

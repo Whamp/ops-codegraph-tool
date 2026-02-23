@@ -17,7 +17,7 @@ function safePath(repoRoot, file) {
 }
 
 const TEST_PATTERN = /\.(test|spec)\.|__test__|__tests__|\.stories\./;
-function isTestFile(filePath) {
+export function isTestFile(filePath) {
   return TEST_PATTERN.test(filePath);
 }
 
@@ -814,17 +814,24 @@ export function statsData(customDbPath, opts = {}) {
   const langCount = Object.keys(byLanguage).length;
 
   // Cycles
-  const fileCycles = findCycles(db, { fileLevel: true });
-  const fnCycles = findCycles(db, { fileLevel: false });
+  const fileCycles = findCycles(db, { fileLevel: true, noTests });
+  const fnCycles = findCycles(db, { fileLevel: false, noTests });
 
   // Top 5 coupling hotspots (fan-in + fan-out, file nodes)
+  const testFilter = noTests
+    ? `AND n.file NOT LIKE '%.test.%'
+       AND n.file NOT LIKE '%.spec.%'
+       AND n.file NOT LIKE '%__test__%'
+       AND n.file NOT LIKE '%__tests__%'
+       AND n.file NOT LIKE '%.stories.%'`
+    : '';
   const hotspotRows = db
     .prepare(`
     SELECT n.file,
       (SELECT COUNT(*) FROM edges WHERE target_id = n.id) as fan_in,
       (SELECT COUNT(*) FROM edges WHERE source_id = n.id) as fan_out
     FROM nodes n
-    WHERE n.kind = 'file'
+    WHERE n.kind = 'file' ${testFilter}
     ORDER BY (SELECT COUNT(*) FROM edges WHERE target_id = n.id)
            + (SELECT COUNT(*) FROM edges WHERE source_id = n.id) DESC
   `)
@@ -856,14 +863,17 @@ export function statsData(customDbPath, opts = {}) {
   }
 
   // Graph quality metrics
+  const qualityTestFilter = testFilter.replace(/n\.file/g, 'file');
   const totalCallable = db
-    .prepare("SELECT COUNT(*) as c FROM nodes WHERE kind IN ('function', 'method')")
+    .prepare(
+      `SELECT COUNT(*) as c FROM nodes WHERE kind IN ('function', 'method') ${qualityTestFilter}`,
+    )
     .get().c;
   const callableWithCallers = db
     .prepare(`
       SELECT COUNT(DISTINCT e.target_id) as c FROM edges e
       JOIN nodes n ON e.target_id = n.id
-      WHERE e.kind = 'calls' AND n.kind IN ('function', 'method')
+      WHERE e.kind = 'calls' AND n.kind IN ('function', 'method') ${testFilter}
     `)
     .get().c;
   const callerCoverage = totalCallable > 0 ? callableWithCallers / totalCallable : 0;
