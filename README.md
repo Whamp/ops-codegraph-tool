@@ -79,10 +79,10 @@ Most code graph tools make you choose: **fast local analysis with no AI, or powe
 | MCP / AI agent support | **Yes** | — | **Yes** | **Yes** | **Yes** | — | **Yes** | — |
 | Git diff impact | **Yes** | — | — | — | — | — | — | **Yes** |
 | Watch mode | **Yes** | — | **Yes** | — | — | — | — | — |
-| CI workflow included | **Yes** | — | — | — | — | — | — | — |
 | Cycle detection | **Yes** | — | **Yes** | — | — | — | — | **Yes** |
 | Incremental rebuilds | **Yes** | — | **Yes** | — | — | — | — | — |
 | Zero config | **Yes** | — | **Yes** | — | — | **Yes** | — | — |
+| Embeddable JS library (`npm install`) | **Yes** | — | — | — | — | — | — | — |
 | LLM-optional (works without API keys) | **Yes** | **Yes** | **Yes** | — | **Yes** | **Yes** | **Yes** | **Yes** |
 | Open source | **Yes** | Yes | Yes | Yes | Yes | Yes | Custom | — |
 
