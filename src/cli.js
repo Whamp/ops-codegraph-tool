@@ -62,18 +62,20 @@ program
   .command('query <name>')
   .description('Find a function/class, show callers and callees')
   .option('-d, --db <path>', 'Path to graph.db')
+  .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('-j, --json', 'Output as JSON')
   .action((name, opts) => {
-    queryName(name, opts.db, { json: opts.json });
+    queryName(name, opts.db, { noTests: !opts.tests, json: opts.json });
   });
 
 program
   .command('impact <file>')
   .description('Show what depends on this file (transitive)')
   .option('-d, --db <path>', 'Path to graph.db')
+  .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('-j, --json', 'Output as JSON')
   .action((file, opts) => {
-    impactAnalysis(file, opts.db, { json: opts.json });
+    impactAnalysis(file, opts.db, { noTests: !opts.tests, json: opts.json });
   });
 
 program
@@ -81,27 +83,30 @@ program
   .description('High-level module overview with most-connected nodes')
   .option('-d, --db <path>', 'Path to graph.db')
   .option('-n, --limit <number>', 'Number of top nodes', '20')
+  .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('-j, --json', 'Output as JSON')
   .action((opts) => {
-    moduleMap(opts.db, parseInt(opts.limit, 10), { json: opts.json });
+    moduleMap(opts.db, parseInt(opts.limit, 10), { noTests: !opts.tests, json: opts.json });
   });
 
 program
   .command('stats')
   .description('Show graph health overview: nodes, edges, languages, cycles, hotspots, embeddings')
   .option('-d, --db <path>', 'Path to graph.db')
+  .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('-j, --json', 'Output as JSON')
   .action((opts) => {
-    stats(opts.db, { json: opts.json });
+    stats(opts.db, { noTests: !opts.tests, json: opts.json });
   });
 
 program
   .command('deps <file>')
   .description('Show what this file imports and what imports it')
   .option('-d, --db <path>', 'Path to graph.db')
+  .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('-j, --json', 'Output as JSON')
   .action((file, opts) => {
-    fileDeps(file, opts.db, { json: opts.json });
+    fileDeps(file, opts.db, { noTests: !opts.tests, json: opts.json });
   });
 
 program
@@ -159,7 +164,7 @@ program
   .option('-k, --kind <kind>', 'Filter to a specific symbol kind')
   .option('--no-source', 'Metadata only (skip source extraction)')
   .option('--include-tests', 'Include test source code')
-  .option('-T, --no-tests', 'Exclude test files from callers')
+  .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('-j, --json', 'Output as JSON')
   .action((name, opts) => {
     if (opts.kind && !ALL_SYMBOL_KINDS.includes(opts.kind)) {
@@ -181,7 +186,7 @@ program
   .command('explain <target>')
   .description('Structural summary of a file or function (no LLM needed)')
   .option('-d, --db <path>', 'Path to graph.db')
-  .option('-T, --no-tests', 'Exclude test/spec files')
+  .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('-j, --json', 'Output as JSON')
   .action((target, opts) => {
     explain(target, opts.db, { noTests: !opts.tests, json: opts.json });
@@ -192,7 +197,7 @@ program
   .description('Find where a symbol is defined and used (minimal, fast lookup)')
   .option('-d, --db <path>', 'Path to graph.db')
   .option('-f, --file <path>', 'File overview: list symbols, imports, exports')
-  .option('-T, --no-tests', 'Exclude test/spec files')
+  .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('-j, --json', 'Output as JSON')
   .action((name, opts) => {
     if (!name && !opts.file) {
@@ -395,7 +400,7 @@ program
   .option('-d, --db <path>', 'Path to graph.db')
   .option('-m, --model <name>', 'Override embedding model (auto-detects from DB)')
   .option('-n, --limit <number>', 'Max results', '15')
-  .option('-T, --no-tests', 'Exclude test/spec files')
+  .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('--min-score <score>', 'Minimum similarity threshold', '0.2')
   .option('-k, --kind <kind>', 'Filter by kind: function, method, class')
   .option('--file <pattern>', 'Filter by file path pattern')
@@ -444,6 +449,7 @@ program
   .option('-n, --limit <number>', 'Number of results', '10')
   .option('--metric <metric>', 'fan-in | fan-out | density | coupling', 'fan-in')
   .option('--level <level>', 'file | directory', 'file')
+  .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('-j, --json', 'Output as JSON')
   .action(async (opts) => {
     const { hotspotsData, formatHotspots } = await import('./structure.js');
@@ -451,6 +457,7 @@ program
       metric: opts.metric,
       level: opts.level,
       limit: parseInt(opts.limit, 10),
+      noTests: !opts.tests,
     });
     if (opts.json) {
       console.log(JSON.stringify(data, null, 2));

@@ -30,6 +30,7 @@ const BASE_TOOLS = [
           description: 'Traversal depth for transitive callers',
           default: 2,
         },
+        no_tests: { type: 'boolean', description: 'Exclude test files', default: false },
       },
       required: ['name'],
     },
@@ -41,6 +42,7 @@ const BASE_TOOLS = [
       type: 'object',
       properties: {
         file: { type: 'string', description: 'File path (partial match supported)' },
+        no_tests: { type: 'boolean', description: 'Exclude test files', default: false },
       },
       required: ['file'],
     },
@@ -52,6 +54,7 @@ const BASE_TOOLS = [
       type: 'object',
       properties: {
         file: { type: 'string', description: 'File path to analyze' },
+        no_tests: { type: 'boolean', description: 'Exclude test files', default: false },
       },
       required: ['file'],
     },
@@ -71,6 +74,7 @@ const BASE_TOOLS = [
       type: 'object',
       properties: {
         limit: { type: 'number', description: 'Number of top files to show', default: 20 },
+        no_tests: { type: 'boolean', description: 'Exclude test files', default: false },
       },
     },
   },
@@ -282,6 +286,7 @@ const BASE_TOOLS = [
           description: 'Rank files or directories',
         },
         limit: { type: 'number', description: 'Number of results to return', default: 10 },
+        no_tests: { type: 'boolean', description: 'Exclude test files', default: false },
       },
     },
   },
@@ -408,13 +413,13 @@ export async function startMCPServer(customDbPath, options = {}) {
       let result;
       switch (name) {
         case 'query_function':
-          result = queryNameData(args.name, dbPath);
+          result = queryNameData(args.name, dbPath, { noTests: args.no_tests });
           break;
         case 'file_deps':
-          result = fileDepsData(args.file, dbPath);
+          result = fileDepsData(args.file, dbPath, { noTests: args.no_tests });
           break;
         case 'impact_analysis':
-          result = impactAnalysisData(args.file, dbPath);
+          result = impactAnalysisData(args.file, dbPath, { noTests: args.no_tests });
           break;
         case 'find_cycles': {
           const db = new Database(findDbPath(dbPath), { readonly: true });
@@ -424,7 +429,7 @@ export async function startMCPServer(customDbPath, options = {}) {
           break;
         }
         case 'module_map':
-          result = moduleMapData(dbPath, args.limit || 20);
+          result = moduleMapData(dbPath, args.limit || 20, { noTests: args.no_tests });
           break;
         case 'fn_deps':
           result = fnDepsData(args.name, dbPath, {
@@ -536,6 +541,7 @@ export async function startMCPServer(customDbPath, options = {}) {
             metric: args.metric,
             level: args.level,
             limit: args.limit,
+            noTests: args.no_tests,
           });
           break;
         }

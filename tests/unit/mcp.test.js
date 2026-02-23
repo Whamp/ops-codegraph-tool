@@ -523,7 +523,9 @@ describe('startMCPServer handler dispatch', () => {
       params: { name: 'query_function', arguments: { name: 'test', repo: 'my-project' } },
     });
     expect(result.isError).toBeUndefined();
-    expect(queryMock).toHaveBeenCalledWith('test', '/resolved/path/.codegraph/graph.db');
+    expect(queryMock).toHaveBeenCalledWith('test', '/resolved/path/.codegraph/graph.db', {
+      noTests: undefined,
+    });
 
     vi.doUnmock('@modelcontextprotocol/sdk/server/index.js');
     vi.doUnmock('@modelcontextprotocol/sdk/server/stdio.js');
@@ -677,7 +679,7 @@ describe('startMCPServer handler dispatch', () => {
       params: { name: 'query_function', arguments: { name: 'test', repo: 'my-repo' } },
     });
     expect(result.isError).toBeUndefined();
-    expect(queryMock).toHaveBeenCalledWith('test', '/resolved/db');
+    expect(queryMock).toHaveBeenCalledWith('test', '/resolved/db', { noTests: undefined });
 
     vi.doUnmock('@modelcontextprotocol/sdk/server/index.js');
     vi.doUnmock('@modelcontextprotocol/sdk/server/stdio.js');
