@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Language, Parser } from 'web-tree-sitter';
 import { warn } from './logger.js';
-import { loadNative } from './native.js';
+import { getNative, loadNative } from './native.js';
 
 // Re-export all extractors for backward compatibility
 export {
@@ -78,7 +78,7 @@ function resolveEngine(opts = {}) {
     const native = loadNative();
     if (native) return { name: 'native', native };
     if (pref === 'native') {
-      warn('Native engine requested but unavailable — falling back to WASM');
+      getNative(); // throws with detailed error + install instructions
     }
   }
   return { name: 'wasm', native: null };

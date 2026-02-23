@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,8 +30,26 @@ afterEach(() => {
 // ─── REGISTRY_PATH ──────────────────────────────────────────────────
 
 describe('REGISTRY_PATH', () => {
-  it('points to ~/.codegraph/registry.json', () => {
+  it('points to ~/.codegraph/registry.json by default', () => {
     expect(REGISTRY_PATH).toBe(path.join(os.homedir(), '.codegraph', 'registry.json'));
+  });
+
+  it('respects CODEGRAPH_REGISTRY_PATH env var', () => {
+    const customPath = path.join(tmpDir, 'custom', 'registry.json');
+    const result = execFileSync(
+      'node',
+      [
+        '--input-type=module',
+        '-e',
+        `import { REGISTRY_PATH } from './src/registry.js'; process.stdout.write(REGISTRY_PATH);`,
+      ],
+      {
+        cwd: path.resolve(import.meta.dirname, '..', '..'),
+        encoding: 'utf-8',
+        env: { ...process.env, CODEGRAPH_REGISTRY_PATH: customPath },
+      },
+    );
+    expect(result).toBe(customPath);
   });
 });
 
