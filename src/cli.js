@@ -216,6 +216,7 @@ program
   .option('--depth <n>', 'Max transitive caller depth', '3')
   .option('-T, --no-tests', 'Exclude test/spec files from results')
   .option('-j, --json', 'Output as JSON')
+  .option('-f, --format <format>', 'Output format: text, mermaid, json', 'text')
   .action((ref, opts) => {
     diffImpact(opts.db, {
       ref,
@@ -223,6 +224,7 @@ program
       depth: parseInt(opts.depth, 10),
       noTests: !opts.tests,
       json: opts.json,
+      format: opts.format,
     });
   });
 
