@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readFileSafe } from './builder.js';
 import { EXTENSIONS, IGNORE_DIRS, normalizePath } from './constants.js';
 import { initSchema, openDb } from './db.js';
 import { appendJournalEntries } from './journal.js';
@@ -35,7 +36,7 @@ async function updateFile(_db, rootDir, filePath, stmts, engineOpts, cache) {
 
   let code;
   try {
-    code = fs.readFileSync(filePath, 'utf-8');
+    code = readFileSafe(filePath);
   } catch (err) {
     warn(`Cannot read ${relPath}: ${err.message}`);
     return null;
