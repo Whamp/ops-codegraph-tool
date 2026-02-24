@@ -14,21 +14,21 @@ Codegraph is a strong local-first code graph CLI. This roadmap describes planned
 |-------|-------|-----------------|--------|
 | [**1**](#phase-1--rust-core) | Rust Core | Rust parsing engine via napi-rs, parallel parsing, incremental tree-sitter, JS orchestration layer | **Complete** (v1.3.0) |
 | [**2**](#phase-2--foundation-hardening) | Foundation Hardening | Parser registry, complete MCP, test coverage, enhanced config, multi-repo MCP | **Complete** (v1.4.0) |
-| [**3**](#phase-3--intelligent-embeddings) | Intelligent Embeddings | LLM-generated descriptions, hybrid search | Planned |
-| [**4**](#phase-4--natural-language-queries) | Natural Language Queries | `ask` command, conversational sessions | Planned |
+| [**3**](#phase-3--intelligent-embeddings) | Intelligent Embeddings | LLM-generated descriptions, hybrid search, build-time semantic metadata, module summaries | Planned |
+| [**4**](#phase-4--natural-language-queries) | Natural Language Queries | `ask` command, conversational sessions, LLM-narrated graph queries, onboarding tools | Planned |
 | [**5**](#phase-5--expanded-language-support) | Expanded Language Support | 8 new languages (12 → 20), parser utilities | Planned |
-| [**6**](#phase-6--github-integration--ci) | GitHub Integration & CI | Reusable GitHub Action, PR review, SARIF output | Planned |
-| [**7**](#phase-7--interactive-visualization--advanced-features) | Visualization & Advanced | Web UI, dead code detection, monorepo, agentic search | Planned |
+| [**6**](#phase-6--github-integration--ci) | GitHub Integration & CI | Reusable GitHub Action, LLM-enhanced PR review, visual impact graphs, SARIF output | Planned |
+| [**7**](#phase-7--interactive-visualization--advanced-features) | Visualization & Advanced | Web UI, dead code detection, monorepo, agentic search, refactoring analysis | Planned |
 
 ### Dependency graph
 
 ```
 Phase 1 (Rust Core)
   └──→ Phase 2 (Foundation Hardening)
-         ├──→ Phase 3 (Embeddings)  ──→ Phase 4 (NL Queries)
+         ├──→ Phase 3 (Embeddings + Metadata)  ──→ Phase 4 (NL Queries + Narration)
          ├──→ Phase 5 (Languages)
-         └──→ Phase 6 (GitHub/CI)
-Phases 1-4 ──→ Phase 7 (Visualization & Advanced)
+         └──→ Phase 6 (GitHub/CI) ←── Phase 3 (risk_score, side_effects)
+Phases 1-4 ──→ Phase 7 (Visualization + Refactoring Analysis)
 ```
 
 ---
@@ -243,6 +243,33 @@ Combine vector similarity with keyword matching.
 
 **Affected files:** `src/embedder.js`, `src/db.js`
 
+### 3.4 — Build-time Semantic Metadata
+
+Enrich nodes with LLM-generated metadata beyond descriptions. Computed incrementally at build time (only for changed nodes), stored as columns on the `nodes` table.
+
+| Column | Content | Example |
+|--------|---------|---------|
+| `side_effects` | Mutation/IO tags | `"writes DB"`, `"sends email"`, `"mutates state"` |
+| `complexity_notes` | Responsibility count, cohesion rating | `"3 responsibilities, low cohesion — consider splitting"` |
+| `risk_score` | Fragility metric from graph centrality + LLM assessment | `0.82` (high fan-in + complex logic) |
+
+- MCP tool: `assess <name>` — returns complexity rating + specific concerns
+- Cascade invalidation: when a node changes, mark dependents for re-enrichment
+
+**Depends on:** 3.1 (LLM provider abstraction)
+
+### 3.5 — Module Summaries
+
+Aggregate function descriptions + dependency direction into file-level narratives.
+
+- `module_summaries` table — one entry per file, re-rolled when any contained node changes
+- MCP tool: `explain_module <file>` — returns module purpose, key exports, role in the system
+- `naming_conventions` metadata per module — detected patterns (camelCase, snake_case, verb-first), flag outliers
+
+**Depends on:** 3.1 (function-level descriptions must exist first)
+
+> **Full spec:** See [llm-integration.md](./llm-integration.md) for detailed architecture, infrastructure table, and prompt design.
+
 ---
 
 ## Phase 4 — Natural Language Queries
@@ -296,6 +323,32 @@ New MCP tool: `ask_codebase` — natural language query via MCP.
 Enables AI coding agents (Claude Code, Cursor, etc.) to ask codegraph questions about the codebase.
 
 **Affected files:** `src/mcp.js`
+
+### 4.4 — LLM-Narrated Graph Queries
+
+Graph traversal + LLM narration for questions that require both structural data and natural-language explanation. Each query walks the graph first, then sends the structural result to the LLM for narration.
+
+| Query | Graph operation | LLM adds |
+|-------|----------------|----------|
+| `trace_flow <entry>` | BFS from entry point to leaves | Sequential narrative: "1. handler validates → 2. calls createOrder → 3. writes DB" |
+| `trace_upstream <name>` | Recursive caller walk | Ranked suspects: "most likely cause is X because it modifies the same state" |
+| `effect_analysis <name>` | Full callee tree walk, aggregate `side_effects` | "Calling X will: write to DB (via Y), send email (via Z)" |
+| `dependency_path <A> <B>` | Shortest path(s) between two symbols | Narrates each hop: "A imports X from B because A needs to validate tokens" |
+
+Pre-computed `flow_narratives` table caches results for key entry points at build time, invalidated when any node in the chain changes.
+
+**Depends on:** 3.4 (`side_effects` metadata), 3.1 (descriptions for narration context)
+
+### 4.5 — Onboarding & Navigation Tools
+
+Help new contributors and AI agents orient in an unfamiliar codebase.
+
+- `entry_points` query — graph finds roots (high fan-out, low fan-in) + LLM ranks by importance
+- `onboarding_guide` command — generates a reading order based on dependency layers
+- MCP tool: `get_started` — returns ordered list: "start here, then read this, then this"
+- `change_plan <description>` — LLM reads description, graph identifies relevant modules, returns touch points and test coverage gaps
+
+**Depends on:** 3.5 (module summaries for context), 4.1 (query engine)
 
 ---
 
@@ -377,9 +430,39 @@ Requires `gh` CLI. For each changed function:
 4. Generate review summary (optionally LLM-enhanced)
 5. Post as PR comment via `gh pr comment`
 
+**LLM-enhanced mode** (when LLM provider configured):
+
+- **Risk labels per node**: `low` (cosmetic / internal), `medium` (behavior change), `high` (breaking / public API)
+- **Review focus ranking**: rank affected files by risk × blast radius — "review this file first"
+- **Critical path highlighting**: shortest path from a changed function to a high-fan-in entry point
+- **Test coverage gaps**: cross-reference affected code with test file graph edges
+
 **New file:** `src/github.js`
 
-### 6.3 — SARIF Output
+### 6.3 — Visual Impact Graphs for PRs
+
+Extend the existing `diff-impact --format mermaid` foundation with CI automation and LLM annotations.
+
+**CI automation** (GitHub Action):
+1. `codegraph build .` (incremental, fast on CI cache)
+2. `codegraph diff-impact $BASE_REF --format mermaid -T` to generate the graph
+3. Post as PR comment — GitHub renders Mermaid natively in markdown
+4. Update on new pushes (edit the existing comment)
+
+**LLM-enriched annotations** (when provider configured):
+- For each changed function: one-line summary of WHAT changed (from diff hunks)
+- For each affected caller: WHY it's affected — what behavior might change downstream
+- Node colors shift from green → yellow → red based on risk labels
+- Overall PR risk score (aggregate of node risks weighted by centrality)
+
+**Historical context overlay:**
+- Annotate nodes with churn data: "this function changed 12 times in the last 30 days"
+- Highlight fragile nodes: high churn + high fan-in = high breakage risk
+- Track blast radius trends: "this PR's blast radius is 2× larger than your average"
+
+**Depends on:** 6.1 (GitHub Action), 3.4 (`risk_score`, `side_effects`)
+
+### 6.4 — SARIF Output
 
 Add SARIF output format for cycle detection. SARIF integrates with GitHub Code Scanning, showing issues inline in the PR.
 
@@ -452,6 +535,34 @@ codegraph agent-search "payment processing"
 
 **New file:** `src/agentic-search.js`
 
+### 7.5 — Refactoring Analysis
+
+LLM-powered structural analysis that identifies refactoring opportunities. The graph provides the structural data; the LLM interprets it.
+
+| Command | Graph operation | LLM adds |
+|---------|----------------|----------|
+| `split_analysis <file>` | Cluster tightly-coupled functions within a file | Proposed split, cross-boundary edges, circular import risk |
+| `extraction_candidates` | Find high fan-in, low internal coupling functions | Rank by utility: "pure helper" vs "has side effects, risky to move" |
+| `signature_impact <name>` | All call sites from graph edges | Suggested new signature, adapter pattern if needed, call sites to update |
+| `lint-names` | Detect naming patterns per module | Flag outliers against detected conventions (camelCase, snake_case, verb-first) |
+| `hotspots` | High fan-in + high fan-out + on many paths | Ranked fragility report with explanations, `risk_score` per node |
+| `boundary_analysis` | Graph clustering (tightly-coupled groups spanning modules) | Reorganization suggestions: "these 4 functions in 3 files all deal with auth" |
+
+**Depends on:** 3.4 (`risk_score`, `complexity_notes`), 3.5 (module summaries)
+
+### 7.6 — Auto-generated Docstrings
+
+```bash
+codegraph annotate
+codegraph annotate --changed-only
+```
+
+LLM-generated docstrings aware of callers, callees, and types. Diff-aware: only regenerate for functions whose code or dependencies changed. Stores in `docstrings` column on nodes table — does not modify source files unless explicitly requested.
+
+**Depends on:** 3.1 (LLM provider abstraction), 3.4 (side effects context)
+
+> **Full spec:** See [llm-integration.md](./llm-integration.md) for detailed architecture, infrastructure tables, and prompt design for all LLM-powered features.
+
 ---
 
 ## Verification Strategy
@@ -462,11 +573,11 @@ Each phase includes targeted verification:
 |-------|-------------|
 | **1** | Benchmark native vs WASM parsing on a large repo, verify identical output from both engines |
 | **2** | `npm test`, manual MCP client test for all tools, config loading tests |
-| **3** | Compare `codegraph search` quality before/after descriptions on a real repo |
-| **4** | `codegraph ask "How does import resolution work?"` against codegraph itself |
+| **3** | Compare `codegraph search` quality before/after descriptions; verify `side_effects` and `risk_score` populated for LLM-enriched builds |
+| **4** | `codegraph ask "How does import resolution work?"` against codegraph itself; verify `trace_flow` and `get_started` produce coherent narration |
 | **5** | Parse sample files for each new language, verify definitions/calls/imports |
-| **6** | Test PR in a fork, verify GitHub Action comment is posted |
-| **7** | `codegraph viz` loads, nodes are interactive, search works |
+| **6** | Test PR in a fork, verify GitHub Action comment with Mermaid graph and risk labels is posted |
+| **7** | `codegraph viz` loads; `hotspots` returns ranked list; `split_analysis` produces actionable output |
 
 **Full integration test** after all phases:
 
@@ -475,7 +586,10 @@ codegraph build .
 codegraph embed --describe        # LLM-enhanced descriptions
 codegraph search "middleware error handling"
 codegraph ask "How does routing work?"
+codegraph trace_flow handleRequest # LLM-narrated execution flow
+codegraph hotspots                 # Fragility report with risk scores
 codegraph diff-impact HEAD~5
+codegraph review --pr 42           # LLM-enhanced PR review
 codegraph viz
 ```
 
