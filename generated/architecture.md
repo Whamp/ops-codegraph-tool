@@ -228,7 +228,7 @@ Consumers receive an engine object and call methods on it. They never branch on 
 
 **Current state:** The entire build pipeline is synchronous batch processing. Parse all files → insert all nodes → build all edges. The watcher does per-file updates but reimplements the pipeline in a simpler form.
 
-**Problem:** For large repos (10K+ files), the user waits for the entire pipeline to complete before seeing anything. There's no progress reporting during parsing. There's no way to cancel a build mid-flight. The watcher's simplified pipeline diverges from the main build path (different code, different edge cases).
+**Problem:** For large repos (10K+ files), the user waits for the entire pipeline to complete before seeing anything. There's no progress reporting during parsing. There's no way to cancel a build mid-flight. The watcher's simplified pipeline diverges from the main build path (different code, different edge cases). *(Note: two concrete edge cases — concurrent file edits causing EBUSY/EACCES during read, and symlink loops causing infinite recursion in `collectFiles` — have been fixed. `readFileSafe` retries on transient OS errors and is shared between `builder.js` and `watcher.js`. `collectFiles` tracks visited real paths to break symlink cycles.)*
 
 **Ideal architecture — event-driven pipeline:**
 
@@ -473,6 +473,8 @@ This is a simple LRU or TTL cache that sits between the analysis layer and the r
 
 **Problem:** Bug fixes to edge building in `builder.js` must be separately applied to `watcher.js`. The watcher's edge building is simpler (no barrel resolution, simpler confidence) which means watch-mode graphs are subtly different from full-build graphs.
 
+**Partial progress:** `readFileSafe` (exported from `builder.js`, imported by `watcher.js`) is the first shared utility between the two modules. It retries on transient OS errors (EBUSY/EACCES/EPERM) that occur when editors perform non-atomic saves, replacing bare `readFileSync` calls in both code paths. This is a small step toward the shared-stages goal.
+
 **Ideal fix:** The pipeline architecture from point #4 eliminates this entirely. Watch mode uses the same pipeline stages, just triggered per-file instead of per-project. The `insertNodes` and `buildEdges` stages are literally the same functions.
 
 ---
@@ -583,7 +585,7 @@ Consumers can only import from the documented entry points. Internal modules are
 | 9 | Transitive import-aware confidence | Low-Medium | Accuracy |
 | 14 | Query result caching | Low | Performance |
 | 8 | Config profiles for monorepos | Low | Feature |
-| 15 | Unify watcher/builder code paths | Low | Falls out of #4 |
+| 15 | Unify watcher/builder code paths | Low | Falls out of #4 (partial: `readFileSafe` shared) |
 
 Items 1–4 and 6 are foundational — they restructure the core and everything else becomes easier after them. Items 13 and 7 are the most impactful feature-level changes. Items 14–15 are natural consequences of earlier changes.
 

@@ -5,7 +5,7 @@
 <h1 align="center">codegraph</h1>
 
 <p align="center">
-  <strong>Always-fresh code intelligence for AI agents — sub-second incremental rebuilds, zero-cost by default, optionally enhanced with your LLM.</strong>
+  <strong>Give your AI the map before it starts exploring.</strong>
 </p>
 
 <p align="center">
@@ -13,62 +13,63 @@
   <a href="https://github.com/optave/codegraph/blob/main/LICENSE"><img src="https://img.shields.io/github/license/optave/codegraph?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="Apache-2.0 License" /></a>
   <a href="https://github.com/optave/codegraph/actions"><img src="https://img.shields.io/github/actions/workflow/status/optave/codegraph/codegraph-impact.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI" alt="CI" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node >= 20" />
-  <img src="https://img.shields.io/badge/graph-always%20fresh-brightgreen?style=flat-square&logo=shield&logoColor=white" alt="Always Fresh" />
 </p>
 
 <p align="center">
-  <a href="#-why-codegraph">Why codegraph?</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-features">Features</a> •
-  <a href="#-commands">Commands</a> •
-  <a href="#-language-support">Languages</a> •
-  <a href="#-ai-agent-integration">AI Integration</a> •
-  <a href="#-recommended-practices">Practices</a> •
-  <a href="#-ci--github-actions">CI/CD</a> •
-  <a href="#-roadmap">Roadmap</a> •
-  <a href="#-contributing">Contributing</a>
+  <a href="#the-problem">The Problem</a> &middot;
+  <a href="#what-codegraph-does">What It Does</a> &middot;
+  <a href="#-quick-start">Quick Start</a> &middot;
+  <a href="#-commands">Commands</a> &middot;
+  <a href="#-language-support">Languages</a> &middot;
+  <a href="#-ai-agent-integration">AI Integration</a> &middot;
+  <a href="#-how-it-works">How It Works</a> &middot;
+  <a href="#-recommended-practices">Practices</a> &middot;
+  <a href="#-roadmap">Roadmap</a>
 </p>
 
 ---
 
-> **The code graph that keeps up with your commits.**
->
-> Codegraph parses your codebase with [tree-sitter](https://tree-sitter.github.io/) (native Rust or WASM), builds a function-level dependency graph in SQLite, and keeps it current with sub-second incremental rebuilds. Every query runs locally — no API keys, no Docker, no setup. When you want deeper intelligence, bring your own LLM provider and codegraph enhances search and analysis through the same API you already use. Your code only goes where you choose to send it.
+## The Problem
 
----
+AI coding assistants are incredible — until your codebase gets big enough. Then they get lost.
 
-## 🔄 Why most code graph tools can't keep up with your commits
+On a large codebase, a great portion of your AI budget isn't going toward solving tasks. It's going toward the AI re-orienting itself in your code. Every session. Over and over. It burns tokens on tool calls — `grep`, `find`, `cat` — just to figure out what calls what. It loses context. It hallucinates dependencies. It modifies a function without realizing 14 callers across 9 files depend on it.
 
-If you use a code graph with an AI agent, the graph needs to be **current**. A stale graph gives the agent wrong answers — deleted functions still show up, new dependencies are invisible, impact analysis misses the code you just wrote. The graph should rebuild on every commit, ideally on every save.
+When the AI catches these mistakes, you waste time and tokens on corrections. When it doesn't catch them, your codebase starts degrading with silent bugs until things stop working.
 
-Most tools in this space can't do that:
+And when you hit `/clear` or run out of context? It starts from scratch.
 
-| Problem | Who has it | Why it breaks on every commit |
-|---|---|---|
-| **Full re-index on every change** | code-graph-rag, CodeMCP, axon, joern, cpg, GitNexus | No file-level change tracking. Change one file → re-parse and re-insert the entire codebase. On a 3,000-file project, that's 30+ seconds per commit minimum |
-| **Cloud API calls baked into the pipeline** | code-graph-rag, CodeRAG | Embeddings are generated through cloud APIs (OpenAI, Voyage AI, Gemini). Every rebuild = API round-trips for every function. Slow, expensive, and rate-limited. You can't put this in a commit hook |
-| **Heavy infrastructure that's slow to restart** | code-graph-rag (Memgraph), axon (KuzuDB), badger-graph (Dgraph) | External databases add latency to every write. Bulk-inserting a full graph into Memgraph is not a sub-second operation |
-| **No persistence between runs** | pyan, cflow | Re-parse from scratch every time. No database, no delta, no incremental anything |
+## What Codegraph Does
 
-**Codegraph solves this with three-tier incremental change detection:**
+Codegraph gives your AI a pre-built, always-current map of your entire codebase — every function, every caller, every dependency — so it stops guessing and starts knowing.
 
-1. **Tier 0 — Journal (O(changed)):** If `codegraph watch` was running, a change journal records exactly which files were touched. The next build reads the journal and only processes those files — zero filesystem scanning
-2. **Tier 1 — mtime+size (O(n) stats, O(changed) reads):** No journal? Codegraph stats every file and compares mtime + size against stored values. Matching files are skipped without reading a single byte — 10-100x cheaper than hashing
-3. **Tier 2 — Hash (O(changed) reads):** Files that fail the mtime/size check are read and MD5-hashed. Only files whose hash actually changed get re-parsed and re-inserted
+It parses your code with [tree-sitter](https://tree-sitter.github.io/) (native Rust or WASM), builds a function-level dependency graph in SQLite, and keeps it current with sub-second incremental rebuilds. Your AI gets answers like _"this function has 14 callers across 9 files"_ instantly, instead of spending 30 tool calls to maybe discover half of them.
 
-**Result:** change one file in a 3,000-file project → rebuild completes in **under a second**. With watch mode active, rebuilds are near-instant — the journal makes the build proportional to the number of changed files, not the size of the codebase. Put it in a commit hook, a file watcher, or let your AI agent trigger it. The graph is always current.
+**Free. Open source. Fully local.** Zero network calls, zero telemetry. Your code stays on your machine. When you want deeper intelligence, bring your own LLM provider — your code only goes where you choose to send it.
 
-And because the core pipeline is pure local computation (tree-sitter + SQLite), there are no API calls, no network latency, and no cost. LLM-powered features (semantic search, richer embeddings) are a separate optional layer — they enhance the graph but never block it from being current.
+**Three commands to get started:**
 
----
+```bash
+npm install -g @optave/codegraph
+cd your-project
+codegraph build
+```
 
-## 💡 Why codegraph?
+That's it. No config files, no Docker, no JVM, no API keys, no accounts. The graph is ready to query. Add `codegraph mcp` to your AI agent's config and it has full access to your dependency graph through 17 MCP tools.
 
-<sub>Comparison last verified: February 2026</sub>
+### Why it matters
 
-Most code graph tools make you choose: **fast local analysis with no AI, or powerful AI features that require full re-indexing through cloud APIs on every change.** Codegraph gives you both — a graph that rebuilds in milliseconds on every commit, with optional LLM enhancement through the provider you're already using.
+| Without codegraph | With codegraph |
+|---|---|
+| AI spends 20+ tool calls per session re-discovering your code structure | AI gets full dependency context in one call |
+| Modifies `parseConfig()` without knowing 9 files import it | `fn-impact parseConfig` shows every caller before the edit |
+| Hallucinates that `auth.js` imports from `db.js` | `deps src/auth.js` shows the real import graph |
+| After `/clear`, starts from scratch | Graph persists — next session picks up where this one left off |
+| Suggests renaming a function, breaks 14 call sites silently | `diff-impact --staged` catches the breakage before you commit |
 
 ### Feature comparison
+
+<sub>Comparison last verified: February 2026</sub>
 
 | Capability | codegraph | [joern](https://github.com/joernio/joern) | [narsil-mcp](https://github.com/postrv/narsil-mcp) | [code-graph-rag](https://github.com/vitali87/code-graph-rag) | [cpg](https://github.com/Fraunhofer-AISEC/cpg) | [GitNexus](https://github.com/abhigyanpatwari/GitNexus) | [CodeMCP](https://github.com/SimplyLiz/CodeMCP) | [axon](https://github.com/harshkedia177/axon) |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -90,81 +91,21 @@ Most code graph tools make you choose: **fast local analysis with no AI, or powe
 
 | | Differentiator | In practice |
 |---|---|---|
-| **⚡** | **Always-fresh graph** | Three-tier change detection: journal (O(changed)) → mtime+size (O(n) stats) → hash (O(changed) reads). Sub-second rebuilds even on large codebases. Competitors re-index everything from scratch; Merkle-tree approaches still require O(n) filesystem scanning |
-| **🔓** | **Zero-cost core, LLM-enhanced when you want** | Full graph analysis with no API keys, no accounts, no cost. Optionally bring your own LLM provider for richer embeddings and AI-powered search — your code only goes to the provider you already chose |
+| **⚡** | **Always-fresh graph** | Three-tier change detection: journal (O(changed)) → mtime+size (O(n) stats) → hash (O(changed) reads). Sub-second rebuilds even on large codebases |
+| **🔓** | **Zero-cost core, LLM-enhanced when you want** | Full graph analysis with no API keys, no accounts, no cost. Optionally bring your own LLM provider — your code only goes where you choose |
 | **🔬** | **Function-level, not just files** | Traces `handleAuth()` → `validateToken()` → `decryptJWT()` and shows 14 callers across 9 files break if `decryptJWT` changes |
-| **🤖** | **Built for AI agents** | 17-tool [MCP server](https://modelcontextprotocol.io/) — AI assistants query your graph directly. Single-repo by default, your code doesn't leak to other projects |
-| **🌐** | **Multi-language, one CLI** | JS/TS + Python + Go + Rust + Java + C# + PHP + Ruby + HCL in a single graph — no juggling Madge, pyan, and cflow |
+| **🤖** | **Built for AI agents** | 17-tool [MCP server](https://modelcontextprotocol.io/) — AI assistants query your graph directly. Single-repo by default |
+| **🌐** | **Multi-language, one CLI** | JS/TS + Python + Go + Rust + Java + C# + PHP + Ruby + HCL in a single graph |
 | **💥** | **Git diff impact** | `codegraph diff-impact` shows changed functions, their callers, and full blast radius — ships with a GitHub Actions workflow |
-| **🧠** | **Semantic search** | Local embeddings by default, LLM-powered embeddings when opted in — multi-query with RRF ranking via `"auth; token; JWT"` |
-
-### How other tools compare
-
-The key question is: **can you rebuild your graph on every commit in a large codebase without it costing money or taking minutes?** Most tools in this space either re-index everything from scratch (slow), require cloud API calls for core features (costly), or both. Codegraph's three-tier incremental detection achieves true O(changed) in the best case — when the watcher is running, rebuilds are proportional only to the number of files that changed, not the size of the codebase. The core pipeline needs no API keys at all. LLM-powered features are opt-in, using whichever provider you already work with.
-
-| Tool | What it does well | The tradeoff |
-|---|---|---|
-| [joern](https://github.com/joernio/joern) | Full CPG (AST + CFG + PDG) for vulnerability discovery, Scala query DSL, 14 languages, daily releases | No incremental builds — full re-parse on every change. Requires JDK 21, no built-in MCP, no watch mode |
-| [narsil-mcp](https://github.com/postrv/narsil-mcp) | 90 MCP tools, 32 languages, taint analysis, SBOM, dead code, neural search, Merkle-tree incremental indexing, single ~30MB binary | Merkle trees still require O(n) filesystem scanning on every rebuild. Primarily MCP-only — no standalone CLI query interface. Neural search requires API key or ONNX source build |
-| [code-graph-rag](https://github.com/vitali87/code-graph-rag) | Graph RAG with Memgraph, multi-provider AI, semantic search, code editing via AST | No incremental rebuilds — full re-index + re-embed through cloud APIs on every change. Requires Docker |
-| [cpg](https://github.com/Fraunhofer-AISEC/cpg) | Formal Code Property Graph (AST + CFG + PDG + DFG), ~10 languages, MCP module, LLVM IR support, academic specifications | No incremental builds. Requires JVM + Gradle, no zero config, no watch mode |
-| [GitNexus](https://github.com/abhigyanpatwari/GitNexus) | Knowledge graph with precomputed structural intelligence, 7 MCP tools, hybrid search (BM25 + semantic + RRF), clustering, process tracing | Full 6-phase pipeline re-run on changes. KuzuDB graph DB, browser mode limited to ~5,000 files. **PolyForm NC — no commercial use** |
-| [CodeMCP](https://github.com/SimplyLiz/CodeMCP) | SCIP compiler-grade indexing, compound operations (83% token savings), secret scanning | No incremental builds. Custom license, requires SCIP toolchains per language |
-| [axon](https://github.com/harshkedia177/axon) | 11-phase pipeline, KuzuDB, community detection, dead code, change coupling | Full pipeline re-run on changes. No license, Python-only, no MCP |
-| [Madge](https://github.com/pahen/madge) | Simple file-level JS/TS dependency graphs | No function-level analysis, no impact tracing, JS/TS only |
-| [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) | Architectural rule validation for JS/TS | Module-level only (function-level explicitly out of scope), requires config |
-| [Nx graph](https://nx.dev/) | Monorepo project-level dependency graph | Requires Nx workspace, project-level only (not file or function) |
-| [pyan](https://github.com/Technologicat/pyan) / [cflow](https://www.gnu.org/software/cflow/) | Function-level call graphs | Single-language each (Python / C only), no persistence, no queries |
-
-### Codegraph vs. Narsil-MCP: How to Decide
-
-If you are looking for local code intelligence over MCP, the closest alternative to `codegraph` is [postrv/narsil-mcp](https://github.com/postrv/narsil-mcp). Both projects aim to give AI agents deep context about your codebase, but they approach the problem with fundamentally different philosophies. 
-
-Here is a cold, analytical breakdown to help you decide which tool fits your workflow.
-
-#### The Core Difference
-
-* **Codegraph is a surgical scalpel.** It does one thing exceptionally well: building an always-fresh, function-level dependency graph in SQLite and exposing it to AI agents with zero fluff.
-* **Narsil-MCP is a Swiss Army knife.** It is a sprawling, "batteries-included" intelligence server that includes everything from taint analysis and SBOM generation to SPARQL knowledge graphs.
-
-#### Feature Comparison
-
-| Aspect | Optave Codegraph | Narsil-MCP |
-| :--- | :--- | :--- |
-| **Philosophy** | Lean, deterministic, AI-optimized | Comprehensive, feature-dense |
-| **AI Tool Count** | 17 focused tools | 90 distinct tools |
-| **Language Support** | 11 languages | 32 languages |
-| **Primary Interface** | CLI-first with MCP integration | MCP-first (CLI is secondary) |
-| **Supply Chain Risk** | Low (minimal dependency tree) | Higher (requires massive dependency graph for embedded ML/scanners) |
-| **Graph Updates** | **Three-tier O(changed)** — journal → mtime+size → hash. With watch mode, only changed files are touched | Merkle trees — O(n) filesystem scan on every rebuild to recompute tree hashes |
-
-#### Choose Codegraph if:
-
-* **You need the fastest possible incremental rebuilds.** Codegraph’s three-tier change detection (journal → mtime+size → hash) achieves true O(changed) when the watcher is running — only touched files are processed. Narsil’s Merkle trees still require O(n) filesystem scanning to recompute hashes on every rebuild, even when nothing changed. On a 3,000-file project, this is the difference between near-instant and noticeable.
-* **You want to optimize AI agent reasoning.** Large Language Models degrade in performance and hallucinate when overwhelmed with choices. Codegraph’s tight 17-tool surface area ensures agents quickly understand their capabilities without wasting context window tokens.
-* **You are concerned about supply chain attacks.** To support 90 tools, SBOMs, and neural embeddings, a tool must pull in a massive dependency tree. Codegraph keeps its dependencies minimal, dramatically reducing the risk of malicious code sneaking onto your machine.
-* **You want deterministic blast-radius checks.** Features like `diff-impact` are built specifically to tell you exactly how a changed function cascades through your codebase before you merge a PR.
-* **You value a strong standalone CLI.** You want to query your code graph locally without necessarily spinning up an AI agent.
-
-#### Choose Narsil-MCP if:
-
-* **You want security and code intelligence together.** You dont want a separated MCP for security and prefer an 'all-in-one solution.
-* **You use niche languages.** Your codebase relies heavily on languages outside of Codegraph's core 11 (e.g., Fortran, Erlang, Zig, Swift).
-* **You are willing to manage tool presets.** Because 90 tools will overload an AI's context window, you don't mind manually configuring preset files (like "Minimal" or "Balanced") to restrict what the AI can see depending on your editor.
+| **🧠** | **Semantic search** | Local embeddings by default, LLM-powered when opted in — multi-query with RRF ranking via `"auth; token; JWT"` |
 
 ---
 
 ## 🚀 Quick Start
 
 ```bash
-# Install from npm
+# Install
 npm install -g @optave/codegraph
-
-# Or install from source
-git clone https://github.com/optave/codegraph.git
-cd codegraph
-npm install
-npm link
 
 # Build a graph for any project
 cd your-project
@@ -176,22 +117,56 @@ codegraph query myFunc # find any function, see callers & callees
 codegraph deps src/index.ts  # file-level import/export map
 ```
 
+Or install from source:
+
+```bash
+git clone https://github.com/optave/codegraph.git
+cd codegraph && npm install && npm link
+```
+
+### For AI agents
+
+Add codegraph to your agent's instructions (e.g. `CLAUDE.md`):
+
+```markdown
+Before modifying code, always:
+1. `codegraph where <name>` — find where the symbol lives
+2. `codegraph context <name> -T` — get full context (source, deps, callers)
+3. `codegraph fn-impact <name> -T` — check blast radius before editing
+
+After modifying code:
+4. `codegraph diff-impact --staged -T` — verify impact before committing
+```
+
+Or connect directly via MCP:
+
+```bash
+codegraph mcp          # 17-tool MCP server — AI queries the graph directly
+```
+
+Full agent setup: [AI Agent Guide](docs/ai-agent-guide.md) &middot; [CLAUDE.md template](docs/ai-agent-guide.md#claudemd-template)
+
+---
+
 ## ✨ Features
 
 | | Feature | Description |
 |---|---|---|
-| 🔍 | **Symbol search** | Find any function, class, or method by name with callers/callees |
+| 🔍 | **Symbol search** | Find any function, class, or method by name — exact match priority, relevance scoring, `--file` and `--kind` filters |
 | 📁 | **File dependencies** | See what a file imports and what imports it |
 | 💥 | **Impact analysis** | Trace every file affected by a change (transitive) |
-| 🧬 | **Function-level tracing** | Call chains, caller trees, and function-level impact |
+| 🧬 | **Function-level tracing** | Call chains, caller trees, and function-level impact with qualified call resolution |
+| 🎯 | **Deep context** | `context` gives AI agents source, deps, callers, signature, and tests for a function in one call; `explain` gives structural summaries of files or functions |
+| 📍 | **Fast lookup** | `where` shows exactly where a symbol is defined and used — minimal, fast |
 | 📊 | **Diff impact** | Parse `git diff`, find overlapping functions, trace their callers |
 | 🗺️ | **Module map** | Bird's-eye view of your most-connected files |
+| 🏗️ | **Structure & hotspots** | Directory cohesion scores, fan-in/fan-out hotspot detection, module boundaries |
 | 🔄 | **Cycle detection** | Find circular dependencies at file or function level |
 | 📤 | **Export** | DOT (Graphviz), Mermaid, and JSON graph export |
 | 🧠 | **Semantic search** | Embeddings-powered natural language search with multi-query RRF ranking |
 | 👀 | **Watch mode** | Incrementally update the graph as files change |
 | 🤖 | **MCP server** | 17-tool MCP server for AI assistants; single-repo by default, opt-in multi-repo |
-| 🔒 | **Your code, your choice** | Zero-cost core with no API keys. Optionally enhance with your LLM provider — your code only goes where you send it |
+| ⚡ | **Always fresh** | Three-tier incremental detection — sub-second rebuilds even on large codebases |
 
 ## 📦 Commands
 
@@ -210,7 +185,19 @@ codegraph watch [dir]          # Watch for changes, update graph incrementally
 codegraph query <name>         # Find a symbol — shows callers and callees
 codegraph deps <file>          # File imports/exports
 codegraph map                  # Top 20 most-connected files
-codegraph map -n 50            # Top 50
+codegraph map -n 50 --no-tests # Top 50, excluding test files
+codegraph where <name>         # Where is a symbol defined and used?
+codegraph where --file src/db.js  # List symbols, imports, exports for a file
+codegraph stats                # Graph health: nodes, edges, languages, quality score
+```
+
+### Deep Context (AI-Optimized)
+
+```bash
+codegraph context <name>       # Full context: source, deps, callers, signature, tests
+codegraph context <name> --depth 2 --no-tests  # Include callee source 2 levels deep
+codegraph explain <file>       # Structural summary: public API, internals, data flow
+codegraph explain <function>   # Function summary: signature, calls, callers, tests
 ```
 
 ### Impact Analysis
@@ -223,6 +210,15 @@ codegraph fn-impact <name>     # What functions break if this one changes
 codegraph diff-impact          # Impact of unstaged git changes
 codegraph diff-impact --staged # Impact of staged changes
 codegraph diff-impact HEAD~3   # Impact vs a specific ref
+codegraph diff-impact main --format mermaid -T  # Mermaid flowchart of blast radius
+```
+
+### Structure & Hotspots
+
+```bash
+codegraph structure            # Directory overview with cohesion scores
+codegraph hotspots             # Files with extreme fan-in, fan-out, or density
+codegraph hotspots --metric coupling --level directory --no-tests
 ```
 
 ### Export & Visualization
@@ -238,10 +234,10 @@ codegraph cycles --functions   # Function-level cycles
 
 ### Semantic Search
 
-Codegraph can build local embeddings for every function, method, and class, then search them by natural language. Everything runs locally using [@huggingface/transformers](https://huggingface.co/docs/transformers.js) — no API keys needed.
+Local embeddings for every function, method, and class — search by natural language. Everything runs locally using [@huggingface/transformers](https://huggingface.co/docs/transformers.js) — no API keys needed.
 
 ```bash
-codegraph embed                # Build embeddings (default: minilm)
+codegraph embed                # Build embeddings (default: nomic-v1.5)
 codegraph embed --model nomic  # Use a different model
 codegraph search "handle authentication"
 codegraph search "parse config" --min-score 0.4 -n 10
@@ -268,9 +264,9 @@ A single trailing semicolon is ignored (falls back to single-query mode). The `-
 | `minilm` | all-MiniLM-L6-v2 | 384 | ~23 MB | Apache-2.0 | Fastest, good for quick iteration |
 | `jina-small` | jina-embeddings-v2-small-en | 512 | ~33 MB | Apache-2.0 | Better quality, still small |
 | `jina-base` | jina-embeddings-v2-base-en | 768 | ~137 MB | Apache-2.0 | High quality, 8192 token context |
-| `jina-code` (default) | jina-embeddings-v2-base-code | 768 | ~137 MB | Apache-2.0 | **Best for code search**, trained on code+text |
+| `jina-code` | jina-embeddings-v2-base-code | 768 | ~137 MB | Apache-2.0 | Best for code search, trained on code+text (requires HF token) |
 | `nomic` | nomic-embed-text-v1 | 768 | ~137 MB | Apache-2.0 | Good quality, 8192 context |
-| `nomic-v1.5` | nomic-embed-text-v1.5 | 768 | ~137 MB | Apache-2.0 | Improved nomic, Matryoshka dimensions |
+| `nomic-v1.5` (default) | nomic-embed-text-v1.5 | 768 | ~137 MB | Apache-2.0 | **Improved nomic, Matryoshka dimensions** |
 | `bge-large` | bge-large-en-v1.5 | 1024 | ~335 MB | MIT | Best general retrieval, top MTEB scores |
 
 The model used during `embed` is stored in the database, so `search` auto-detects it — no need to pass `--model` when searching.
@@ -289,28 +285,18 @@ codegraph registry remove <name>  # Unregister
 
 `codegraph build` auto-registers the project — no manual setup needed.
 
-### AI Integration
-
-```bash
-codegraph mcp                  # Start MCP server (single-repo, current project only)
-codegraph mcp --multi-repo     # Enable access to all registered repos
-codegraph mcp --repos a,b      # Restrict to specific repos (implies --multi-repo)
-```
-
-By default, the MCP server only exposes the local project's graph. AI agents cannot access other repositories unless you explicitly opt in with `--multi-repo` or `--repos`.
-
 ### Common Flags
 
 | Flag | Description |
 |---|---|
 | `-d, --db <path>` | Custom path to `graph.db` |
-| `-T, --no-tests` | Exclude `.test.`, `.spec.`, `__test__` files |
+| `-T, --no-tests` | Exclude `.test.`, `.spec.`, `__test__` files (available on `fn`, `fn-impact`, `context`, `explain`, `where`, `diff-impact`, `search`, `map`, `hotspots`, `deps`, `impact`) |
 | `--depth <n>` | Transitive trace depth (default varies by command) |
 | `-j, --json` | Output as JSON |
 | `-v, --verbose` | Enable debug output |
 | `--engine <engine>` | Parser engine: `native`, `wasm`, or `auto` (default: `auto`) |
-| `-k, --kind <kind>` | Filter by kind: `function`, `method`, `class`, `struct`, `enum`, `trait`, `record`, `module` (search) |
-| `--file <pattern>` | Filter by file path pattern (search) |
+| `-k, --kind <kind>` | Filter by kind: `function`, `method`, `class`, `struct`, `enum`, `trait`, `record`, `module` (`fn`, `context`, `search`) |
+| `-f, --file <path>` | Scope to a specific file (`fn`, `context`, `where`) |
 | `--rrf-k <n>` | RRF smoothing constant for multi-query search (default 60) |
 
 ## 🌐 Language Support
@@ -348,6 +334,16 @@ By default, the MCP server only exposes the local project's graph. AI agents can
 4. **Store** — Everything goes into SQLite as nodes + edges with tree-sitter node boundaries
 5. **Query** — All queries run locally against the SQLite DB — typically under 100ms
 
+### Incremental Rebuilds
+
+The graph stays current without re-parsing your entire codebase. Three-tier change detection ensures rebuilds are proportional to what changed, not the size of the project:
+
+1. **Tier 0 — Journal (O(changed)):** If `codegraph watch` was running, a change journal records exactly which files were touched. The next build reads the journal and only processes those files — zero filesystem scanning
+2. **Tier 1 — mtime+size (O(n) stats, O(changed) reads):** No journal? Codegraph stats every file and compares mtime + size against stored values. Matching files are skipped without reading a single byte
+3. **Tier 2 — Hash (O(changed) reads):** Files that fail the mtime/size check are read and MD5-hashed. Only files whose hash actually changed get re-parsed and re-inserted
+
+**Result:** change one file in a 3,000-file project and the rebuild completes in under a second. Put it in a commit hook, a file watcher, or let your AI agent trigger it.
+
 ### Dual Engine
 
 Codegraph ships with two parsing engines:
@@ -361,18 +357,19 @@ Both engines produce identical output. Use `--engine native|wasm|auto` to contro
 
 ### Call Resolution
 
-Calls are resolved with priority and confidence scoring:
+Calls are resolved with **qualified resolution** — method calls (`obj.method()`) are distinguished from standalone function calls, and built-in receivers (`console`, `Math`, `JSON`, `Array`, `Promise`, etc.) are filtered out automatically. Import scope is respected: a call to `foo()` only resolves to functions that are actually imported or defined in the same file, eliminating false positives from name collisions.
 
 | Priority | Source | Confidence |
 |---|---|---|
 | 1 | **Import-aware** — `import { foo } from './bar'` → link to `bar` | `1.0` |
 | 2 | **Same-file** — definitions in the current file | `1.0` |
-| 3 | **Same directory** — definitions in sibling files | `0.7` |
-| 4 | **Same parent directory** — definitions in sibling dirs | `0.5` |
-| 5 | **Global fallback** — match by name across codebase | `0.3` |
-| 6 | **Method hierarchy** — resolved through `extends`/`implements` | — |
+| 3 | **Same directory** — definitions in sibling files (standalone calls only) | `0.7` |
+| 4 | **Same parent directory** — definitions in sibling dirs (standalone calls only) | `0.5` |
+| 5 | **Method hierarchy** — resolved through `extends`/`implements` | varies |
 
-Dynamic patterns like `fn.call()`, `fn.apply()`, `fn.bind()`, and `obj["method"]()` are also detected on a best-effort basis.
+Method calls on unknown receivers skip global fallback entirely — `stmt.run()` will never resolve to a standalone `run` function in another file. Duplicate caller/callee edges are deduplicated automatically. Dynamic patterns like `fn.call()`, `fn.apply()`, `fn.bind()`, and `obj["method"]()` are also detected on a best-effort basis.
+
+Codegraph also extracts symbols from common callback patterns: Commander `.command().action()` callbacks (as `command:build`), Express route handlers (as `route:GET /api/users`), and event emitter listeners (as `event:data`).
 
 ## 📊 Performance
 
@@ -380,10 +377,10 @@ Self-measured on every release via CI ([full history](generated/BENCHMARKS.md)):
 
 | Metric | Latest |
 |---|---|
-| Build speed (native) | **2.5 ms/file** |
-| Build speed (WASM) | **5 ms/file** |
+| Build speed (native) | **1.9 ms/file** |
+| Build speed (WASM) | **6.6 ms/file** |
 | Query time | **1ms** |
-| ~50,000 files (est.) | **~125.0s build** |
+| ~50,000 files (est.) | **~95.0s build** |
 
 Metrics are normalized per file for cross-version comparability. Times above are for a full initial build — incremental rebuilds only re-parse changed files.
 
@@ -395,8 +392,8 @@ Codegraph includes a built-in [Model Context Protocol](https://modelcontextproto
 
 ```bash
 codegraph mcp                  # Single-repo mode (default) — only local project
-codegraph mcp --multi-repo     # Multi-repo — all registered repos accessible
-codegraph mcp --repos a,b      # Multi-repo with allowlist
+codegraph mcp --multi-repo     # Enable access to all registered repos
+codegraph mcp --repos a,b      # Restrict to specific repos (implies --multi-repo)
 ```
 
 **Single-repo mode (default):** Tools operate only on the local `.codegraph/graph.db`. The `repo` parameter and `list_repos` tool are not exposed to the AI agent.
@@ -567,17 +564,35 @@ const { results: fused } = await multiSearchData(
 - **Dynamic calls are best-effort** — complex computed property access and `eval` patterns are not resolved
 - **Python imports** — resolves relative imports but doesn't follow `sys.path` or virtual environment packages
 
+## 🔍 How Codegraph Compares
+
+<sub>Last verified: February 2026. Full analysis: <a href="generated/COMPETITIVE_ANALYSIS.md">COMPETITIVE_ANALYSIS.md</a></sub>
+
+| Capability | codegraph | [joern](https://github.com/joernio/joern) | [narsil-mcp](https://github.com/postrv/narsil-mcp) | [code-graph-rag](https://github.com/vitali87/code-graph-rag) | [cpg](https://github.com/Fraunhofer-AISEC/cpg) | [GitNexus](https://github.com/abhigyanpatwari/GitNexus) |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Function-level analysis | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** |
+| Multi-language | **11** | **14** | **32** | Multi | **~10** | **9** |
+| Incremental rebuilds | **O(changed)** | — | O(n) Merkle | — | — | — |
+| MCP / AI agent support | **Yes** | — | **Yes** | **Yes** | **Yes** | **Yes** |
+| Git diff impact | **Yes** | — | — | — | — | **Yes** |
+| Semantic search | **Yes** | — | **Yes** | **Yes** | — | **Yes** |
+| Watch mode | **Yes** | — | **Yes** | — | — | — |
+| Zero config, no Docker/JVM | **Yes** | — | **Yes** | — | — | — |
+| Works without API keys | **Yes** | **Yes** | **Yes** | — | **Yes** | **Yes** |
+| Commercial use (Apache/MIT) | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** | — |
+
 ## 🗺️ Roadmap
 
-See **[ROADMAP.md](ROADMAP.md)** for the full development roadmap. Current plan:
+See **[ROADMAP.md](ROADMAP.md)** for the full development roadmap and **[STABILITY.md](STABILITY.md)** for the stability policy and versioning guarantees. Current plan:
 
 1. ~~**Rust Core**~~ — **Complete** (v1.3.0) — native tree-sitter parsing via napi-rs, parallel multi-core parsing, incremental re-parsing, import resolution & cycle detection in Rust
 2. ~~**Foundation Hardening**~~ — **Complete** (v1.4.0) — parser registry, 12-tool MCP server with multi-repo support, test coverage 62%→75%, `apiKeyCommand` secret resolution, global repo registry
-3. **Intelligent Embeddings** — LLM-generated descriptions, hybrid search
-4. **Natural Language Queries** — `codegraph ask` command, conversational sessions
-5. **Expanded Language Support** — 8 new languages (12 → 20)
-6. **GitHub Integration & CI** — reusable GitHub Action, PR review, SARIF output
-7. **Visualization & Advanced** — web UI, dead code detection, monorepo support, agentic search
+3. **Architectural Refactoring** — parser plugin system, repository pattern, pipeline builder, engine strategy, domain errors, curated API
+4. **Intelligent Embeddings** — LLM-generated descriptions, hybrid search
+5. **Natural Language Queries** — `codegraph ask` command, conversational sessions
+6. **Expanded Language Support** — 8 new languages (12 → 20)
+7. **GitHub Integration & CI** — reusable GitHub Action, PR review, SARIF output
+8. **Visualization & Advanced** — web UI, dead code detection, monorepo support, agentic search
 
 ## 🤝 Contributing
 
@@ -599,5 +614,5 @@ Looking to add a new language? Check out **[Adding a New Language](docs/adding-a
 ---
 
 <p align="center">
-  <sub>Built with <a href="https://tree-sitter.github.io/">tree-sitter</a> and <a href="https://github.com/WiseLibs/better-sqlite3">better-sqlite3</a>. Your code only goes where you choose to send it.</sub>
+  <sub>Built with <a href="https://tree-sitter.github.io/">tree-sitter</a> and <a href="https://github.com/WiseLibs/better-sqlite3">better-sqlite3</a>. Your code stays on your machine.</sub>
 </p>

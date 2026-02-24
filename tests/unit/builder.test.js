@@ -8,8 +8,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { collectFiles, loadPathAliases } from '../../src/builder.js';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { collectFiles, loadPathAliases, readFileSafe } from '../../src/builder.js';
 
 let tmpDir;
 
@@ -109,6 +109,25 @@ describe('collectFiles', () => {
     const files = collectFiles(path.join(tmpDir, 'does-not-exist'));
     expect(files).toEqual([]);
   });
+
+  it('detects symlink loops without infinite recursion', () => {
+    const loopDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-symloop-'));
+    const subDir = path.join(loopDir, 'sub');
+    fs.mkdirSync(subDir);
+    fs.writeFileSync(path.join(subDir, 'a.js'), 'export const a = 1;');
+    try {
+      fs.symlinkSync(loopDir, path.join(subDir, 'loop'), 'junction');
+    } catch {
+      // Symlinks may require elevated privileges on Windows — skip gracefully
+      fs.rmSync(loopDir, { recursive: true, force: true });
+      return;
+    }
+    // Should complete without stack overflow
+    const files = collectFiles(loopDir);
+    const basenames = files.map((f) => path.basename(f));
+    expect(basenames).toContain('a.js');
+    fs.rmSync(loopDir, { recursive: true, force: true });
+  });
 });
 
 // ─── loadPathAliases ──────────────────────────────────────────────
@@ -202,5 +221,54 @@ describe('loadPathAliases', () => {
     const aliases = loadPathAliases(dir);
     expect(aliases.baseUrl).toContain('ts-src');
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+// ─── readFileSafe ─────────────────────────────────────────────────
+
+describe('readFileSafe', () => {
+  it('reads a file normally', () => {
+    const filePath = path.join(tmpDir, 'src', 'app.js');
+    const content = readFileSafe(filePath);
+    expect(content).toBe('export default {}');
+  });
+
+  it('throws ENOENT for non-existent file without retrying', () => {
+    const spy = vi.spyOn(fs, 'readFileSync');
+    expect(() => readFileSafe(path.join(tmpDir, 'nope.js'))).toThrow();
+    // ENOENT is not transient — should only be called once (no retries)
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it('retries on transient errors and succeeds', () => {
+    const filePath = path.join(tmpDir, 'src', 'app.js');
+    const realContent = fs.readFileSync(filePath, 'utf-8');
+    let callCount = 0;
+    const spy = vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      callCount++;
+      if (callCount <= 2) {
+        const err = new Error('resource busy');
+        err.code = 'EBUSY';
+        throw err;
+      }
+      return realContent;
+    });
+    const content = readFileSafe(filePath);
+    expect(content).toBe(realContent);
+    expect(callCount).toBe(3); // 2 transient failures + 1 success
+    spy.mockRestore();
+  });
+
+  it('throws after exhausting retries on transient errors', () => {
+    const spy = vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      const err = new Error('permission denied');
+      err.code = 'EACCES';
+      throw err;
+    });
+    expect(() => readFileSafe(path.join(tmpDir, 'src', 'app.js'), 1)).toThrow('permission denied');
+    // 1 retry = 2 total attempts (initial + 1 retry)
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
   });
 });
