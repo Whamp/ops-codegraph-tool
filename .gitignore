@@ -9,3 +9,4 @@ grammars/*.wasm
 artifacts/
 pkg/
 generated/DEPENDENCIES.md
+generated/DEPENDENCIES.json
