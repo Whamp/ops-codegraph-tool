@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { loadConfig } from './config.js';
 import { EXTENSIONS, IGNORE_DIRS, normalizePath } from './constants.js';
@@ -43,8 +42,28 @@ const BUILTIN_RECEIVERS = new Set([
   'require',
 ]);
 
-export function collectFiles(dir, files = [], config = {}, directories = null) {
+export function collectFiles(
+  dir,
+  files = [],
+  config = {},
+  directories = null,
+  _visited = new Set(),
+) {
   const trackDirs = directories !== null;
+
+  // Resolve real path to detect symlink loops
+  let realDir;
+  try {
+    realDir = fs.realpathSync(dir);
+  } catch {
+    return trackDirs ? { files, directories } : files;
+  }
+  if (_visited.has(realDir)) {
+    warn(`Symlink loop detected, skipping: ${dir}`);
+    return trackDirs ? { files, directories } : files;
+  }
+  _visited.add(realDir);
+
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -67,7 +86,7 @@ export function collectFiles(dir, files = [], config = {}, directories = null) {
 
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      collectFiles(full, files, config, directories);
+      collectFiles(full, files, config, directories, _visited);
     } else if (EXTENSIONS.has(path.extname(entry.name))) {
       files.push(full);
       hasFiles = true;
@@ -122,6 +141,28 @@ function fileStat(filePath) {
     return { mtimeMs: s.mtimeMs, size: s.size };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Read a file with retry on transient errors (EBUSY/EACCES/EPERM).
+ * Editors performing non-atomic saves can cause these during mid-write.
+ */
+const TRANSIENT_CODES = new Set(['EBUSY', 'EACCES', 'EPERM']);
+const RETRY_DELAY_MS = 50;
+
+export function readFileSafe(filePath, retries = 2) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return fs.readFileSync(filePath, 'utf-8');
+    } catch (err) {
+      if (attempt < retries && TRANSIENT_CODES.has(err.code)) {
+        const end = Date.now() + RETRY_DELAY_MS;
+        while (Date.now() < end) {}
+        continue;
+      }
+      throw err;
+    }
   }
 }
 
@@ -193,7 +234,7 @@ function getChangedFiles(db, allFiles, rootDir) {
 
         let content;
         try {
-          content = fs.readFileSync(absPath, 'utf-8');
+          content = readFileSafe(absPath);
         } catch {
           continue;
         }
@@ -256,7 +297,7 @@ function getChangedFiles(db, allFiles, rootDir) {
   for (const item of needsHash) {
     let content;
     try {
-      content = fs.readFileSync(item.file, 'utf-8');
+      content = readFileSafe(item.file);
     } catch {
       continue;
     }
@@ -459,7 +500,7 @@ export async function buildGraph(rootDir, opts = {}) {
           const absPath = path.join(rootDir, relPath);
           let code;
           try {
-            code = fs.readFileSync(absPath, 'utf-8');
+            code = readFileSafe(absPath);
           } catch {
             code = null;
           }
@@ -788,7 +829,8 @@ export async function buildGraph(rootDir, opts = {}) {
   writeJournalHeader(rootDir, Date.now());
 
   if (!opts.skipRegistry) {
-    const tmpDir = path.resolve(os.tmpdir());
+    const { tmpdir } = await import('node:os');
+    const tmpDir = path.resolve(tmpdir());
     const resolvedRoot = path.resolve(rootDir);
     if (resolvedRoot.startsWith(tmpDir)) {
       debug(`Skipping auto-registration for temp directory: ${resolvedRoot}`);
