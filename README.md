@@ -173,6 +173,8 @@ Full agent setup: [AI Agent Guide](docs/guides/ai-agent-guide.md) &middot; [CLAU
 | 🤖 | **MCP server** | 19-tool MCP server for AI assistants; single-repo by default, opt-in multi-repo |
 | ⚡ | **Always fresh** | Three-tier incremental detection — sub-second rebuilds even on large codebases |
 
+See [docs/examples](docs/examples) for real-world CLI and MCP usage examples.
+
 ## 📦 Commands
 
 ### Build & Watch
