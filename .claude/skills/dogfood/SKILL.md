@@ -158,6 +158,33 @@ Test that incremental rebuilds, full rebuilds, and cross-feature state remain co
 
 ---
 
+## Phase 4b — Performance Benchmarks
+
+Run all four benchmark scripts from the codegraph source repo (not the temp install dir) and record results. These detect performance regressions between releases.
+
+| Benchmark | Script | What it measures | When it matters |
+|-----------|--------|-----------------|-----------------|
+| Build | `node scripts/benchmark.js` | Build speed (native vs WASM), query latency | Always |
+| Incremental | `node scripts/incremental-benchmark.js` | Incremental build tiers, import resolution throughput | Always |
+| Query | `node scripts/query-benchmark.js` | Query depth scaling, diff-impact latency | Always |
+| Embedding | `node scripts/embedding-benchmark.js` | Search recall (Hit@1/3/5/10) across models | Always |
+
+1. Run all four from the codegraph source repo directory.
+2. Record the JSON output from each.
+3. Compare with the previous release's numbers in `generated/BUILD-BENCHMARKS.md` (build benchmark) and previous dogfood reports.
+4. Flag any regressions:
+   - Build time per file >10% slower → investigate
+   - Query latency >2x slower → investigate
+   - Embedding recall (Hit@5) drops by >2% → investigate
+   - Incremental no-op >10ms → investigate
+5. Include a **Performance Benchmarks** section in the report with tables for each benchmark.
+
+**Note:** The native engine may not be available in the dev repo (no prebuilt binary in `node_modules`). Record WASM results at minimum. If native is available, record both.
+
+**IMPORTANT:** If your bug-fix PR touches code covered by a benchmark (`builder.js`, `parser.js`, `queries.js`, `resolve.js`, `db.js`, `embedder.js`, `journal.js`), you **must** run the relevant benchmarks **before and after** your changes and include the comparison in the PR description.
+
+---
+
 ## Phase 5 — Changes Since Last Release
 
 1. Read `CHANGELOG.md` to identify what changed in v$ARGUMENTS vs the previous version.
@@ -254,14 +281,15 @@ For each bug you can fix in this session:
 2. Implement the fix.
 3. Run `npm test` to verify no regressions.
 4. Run `npm run lint` to verify code style.
-5. Commit with a message referencing the issue:
+5. **Run benchmarks before and after** if your fix touches code covered by a benchmark (see Phase 4b table). Include the comparison in the PR body.
+6. Commit with a message referencing the issue:
    ```
    fix(<scope>): <description>
 
    Closes #<issue-number>
    ```
    The `Closes #N` footer tells GitHub to auto-close the issue when the PR merges.
-6. Push and open a PR:
+7. Push and open a PR. If benchmarks were run, include them in the body:
    ```bash
    gh pr create --base main \
      --title "fix(<scope>): <description>" \
@@ -272,12 +300,15 @@ For each bug you can fix in this session:
    ## Found during
    Dogfooding v$ARGUMENTS — see #<issue-number>
 
+   ## Benchmark results
+   <before/after table if applicable — see Phase 4b>
+
    ## Test plan
    - [ ] <how to verify the fix>
    PR_EOF
    )"
    ```
-7. Return to the main working branch before continuing to the next bug.
+8. Return to the main working branch before continuing to the next bug.
 
 If a bug is too complex to fix in this session, leave the issue open and note it in the report.
 
