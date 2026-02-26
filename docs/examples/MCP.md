@@ -247,6 +247,74 @@ Function impact: f buildGraph -- src/builder.js:335
 
 ---
 
+## symbol_path — Shortest path between two symbols
+
+Find how one function reaches another through the call graph.
+
+```json
+{
+  "tool": "symbol_path",
+  "arguments": { "from": "resolveNoTests", "to": "openDb", "no_tests": true }
+}
+```
+
+```json
+{
+  "from": "resolveNoTests",
+  "to": "openDb",
+  "found": true,
+  "hops": 2,
+  "path": [
+    { "name": "resolveNoTests", "kind": "function", "file": "src/cli.js", "line": 59, "edgeKind": null },
+    { "name": "buildGraph", "kind": "function", "file": "src/builder.js", "line": 335, "edgeKind": "calls" },
+    { "name": "openDb", "kind": "function", "file": "src/db.js", "line": 76, "edgeKind": "calls" }
+  ],
+  "alternateCount": 0,
+  "edgeKinds": ["calls"],
+  "reverse": false,
+  "maxDepth": 10
+}
+```
+
+Reverse direction — follow edges backward:
+
+```json
+{
+  "tool": "symbol_path",
+  "arguments": { "from": "openDb", "to": "buildGraph", "reverse": true, "no_tests": true }
+}
+```
+
+```json
+{
+  "from": "openDb",
+  "to": "buildGraph",
+  "found": true,
+  "hops": 1,
+  "path": [
+    { "name": "openDb", "kind": "function", "file": "src/db.js", "line": 76, "edgeKind": null },
+    { "name": "buildGraph", "kind": "function", "file": "src/builder.js", "line": 335, "edgeKind": "calls" }
+  ],
+  "alternateCount": 0,
+  "reverse": true
+}
+```
+
+When no path exists, `found` is `false` and the path is empty:
+
+```json
+{
+  "from": "openDb",
+  "to": "buildGraph",
+  "found": false,
+  "hops": null,
+  "path": [],
+  "alternateCount": 0
+}
+```
+
+---
+
 ## impact_analysis — File-level transitive dependents
 
 ```json
@@ -511,6 +579,155 @@ graph LR
   GoExtractor_extract["GoExtractor.extract"] --> walk_node["walk_node"]
   walk_node["walk_node"] --> node_text["node_text"]
   walk_node["walk_node"] --> start_line["start_line"]
+```
+
+---
+
+## node_roles — Node role classification
+
+```json
+{
+  "tool": "node_roles",
+  "arguments": { "no_tests": true }
+}
+```
+
+```
+Node roles (639 symbols):
+
+  core: 168  utility: 285  entry: 29  dead: 137  leaf: 20
+
+## core (168)
+  f safePath           src/queries.js:14
+  f isTestFile         src/queries.js:21
+  f getClassHierarchy  src/queries.js:76
+  ...
+
+## entry (29)
+  f command:build      src/cli.js:89
+  f command:query      src/cli.js:102
+  ...
+```
+
+Filter by role:
+
+```json
+{
+  "tool": "node_roles",
+  "arguments": { "role": "dead", "no_tests": true }
+}
+```
+
+```
+Node roles (137 symbols):
+
+  dead: 137
+
+## dead (137)
+  f main                 crates/codegraph-core/build.rs:3
+  - TarjanState          crates/codegraph-core/src/cycles.rs:38
+  - CSharpExtractor      crates/codegraph-core/src/extractors/csharp.rs:6
+  ...
+```
+
+Filter by role and file:
+
+```json
+{
+  "tool": "node_roles",
+  "arguments": { "role": "core", "file": "src/queries.js" }
+}
+```
+
+```
+Node roles (16 symbols):
+
+  core: 16
+
+## core (16)
+  f safePath             src/queries.js:14
+  f isTestFile           src/queries.js:21
+  f getClassHierarchy    src/queries.js:76
+  f resolveMethodViaHierarchy  src/queries.js:97
+  f findMatchingNodes    src/queries.js:127
+  ...
+```
+
+---
+
+## co_changes — Git co-change analysis
+
+Query top co-changing file pairs:
+
+```json
+{
+  "tool": "co_changes",
+  "arguments": { "no_tests": true }
+}
+```
+
+```
+Top co-change pairs:
+
+  100%     3 commits  src/extractors/csharp.js  <->  src/extractors/go.js
+  100%     3 commits  src/extractors/csharp.js  <->  src/extractors/java.js
+  100%     3 commits  src/extractors/go.js      <->  src/extractors/java.js
+  ...
+
+  Analyzed: 2026-02-26 | Window: 1 year ago
+```
+
+Query co-change partners for a specific file:
+
+```json
+{
+  "tool": "co_changes",
+  "arguments": { "file": "src/queries.js" }
+}
+```
+
+```
+Co-change partners for src/queries.js:
+
+   43%    12 commits  src/mcp.js
+
+  Analyzed: 2026-02-26 | Window: 1 year ago
+```
+
+---
+
+## symbol_path — Shortest path between two symbols
+
+```json
+{
+  "tool": "symbol_path",
+  "arguments": { "from": "buildGraph", "to": "resolveImports", "no_tests": true }
+}
+```
+
+```
+Path: buildGraph → resolveImports (1 hop)
+
+  buildGraph  src/builder.js:335  →(calls)→  resolveImports  src/resolve.js:42
+
+  Hops: 1 | Alternate paths: 0
+```
+
+```json
+{
+  "tool": "symbol_path",
+  "arguments": { "from": "buildGraph", "to": "isTestFile", "no_tests": true }
+}
+```
+
+```
+Path: buildGraph → isTestFile (2 hops)
+
+  buildGraph      src/builder.js:335
+    →(calls)→  collectFiles  src/builder.js:45
+    →(calls)→  isTestFile    src/queries.js:21
+
+  Hops: 2 | Alternate paths: 1
 ```
 
 ---

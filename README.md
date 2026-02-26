@@ -55,7 +55,7 @@ cd your-project
 codegraph build
 ```
 
-That's it. No config files, no Docker, no JVM, no API keys, no accounts. The graph is ready to query. Add `codegraph mcp` to your AI agent's config and it has full access to your dependency graph through 19 MCP tools.
+That's it. No config files, no Docker, no JVM, no API keys, no accounts. The graph is ready to query. Add `codegraph mcp` to your AI agent's config and it has full access to your dependency graph through 21 MCP tools (22 in multi-repo mode).
 
 ### Why it matters
 
@@ -97,7 +97,7 @@ That's it. No config files, no Docker, no JVM, no API keys, no accounts. The gra
 | **🔓** | **Zero-cost core, LLM-enhanced when you want** | Full graph analysis with no API keys, no accounts, no cost. Optionally bring your own LLM provider — your code only goes where you choose |
 | **🔬** | **Function-level, not just files** | Traces `handleAuth()` → `validateToken()` → `decryptJWT()` and shows 14 callers across 9 files break if `decryptJWT` changes |
 | **🏷️** | **Role classification** | Every symbol auto-tagged as `entry`/`core`/`utility`/`adapter`/`dead`/`leaf` — agents instantly know what they're looking at |
-| **🤖** | **Built for AI agents** | 19-tool [MCP server](https://modelcontextprotocol.io/) — AI assistants query your graph directly. Single-repo by default |
+| **🤖** | **Built for AI agents** | 21-tool [MCP server](https://modelcontextprotocol.io/) — AI assistants query your graph directly. Single-repo by default |
 | **🌐** | **Multi-language, one CLI** | JS/TS + Python + Go + Rust + Java + C# + PHP + Ruby + HCL in a single graph |
 | **💥** | **Git diff impact** | `codegraph diff-impact` shows changed functions, their callers, and full blast radius — enriched with historically coupled files from git co-change analysis. Ships with a GitHub Actions workflow |
 | **🧠** | **Semantic search** | Local embeddings by default, LLM-powered when opted in — multi-query with RRF ranking via `"auth; token; JWT"` |
@@ -144,7 +144,7 @@ After modifying code:
 Or connect directly via MCP:
 
 ```bash
-codegraph mcp          # 19-tool MCP server — AI queries the graph directly
+codegraph mcp          # 21-tool MCP server — AI queries the graph directly
 ```
 
 Full agent setup: [AI Agent Guide](docs/guides/ai-agent-guide.md) &middot; [CLAUDE.md template](docs/guides/ai-agent-guide.md#claudemd-template)
@@ -158,7 +158,7 @@ Full agent setup: [AI Agent Guide](docs/guides/ai-agent-guide.md) &middot; [CLAU
 | 🔍 | **Symbol search** | Find any function, class, or method by name — exact match priority, relevance scoring, `--file` and `--kind` filters |
 | 📁 | **File dependencies** | See what a file imports and what imports it |
 | 💥 | **Impact analysis** | Trace every file affected by a change (transitive) |
-| 🧬 | **Function-level tracing** | Call chains, caller trees, and function-level impact with qualified call resolution |
+| 🧬 | **Function-level tracing** | Call chains, caller trees, function-level impact, and A→B pathfinding with qualified call resolution |
 | 🎯 | **Deep context** | `context` gives AI agents source, deps, callers, signature, and tests for a function in one call; `explain` gives structural summaries of files or functions |
 | 📍 | **Fast lookup** | `where` shows exactly where a symbol is defined and used — minimal, fast |
 | 📊 | **Diff impact** | Parse `git diff`, find overlapping functions, trace their callers |
@@ -170,7 +170,7 @@ Full agent setup: [AI Agent Guide](docs/guides/ai-agent-guide.md) &middot; [CLAU
 | 📤 | **Export** | DOT (Graphviz), Mermaid, and JSON graph export |
 | 🧠 | **Semantic search** | Embeddings-powered natural language search with multi-query RRF ranking |
 | 👀 | **Watch mode** | Incrementally update the graph as files change |
-| 🤖 | **MCP server** | 19-tool MCP server for AI assistants; single-repo by default, opt-in multi-repo |
+| 🤖 | **MCP server** | 21-tool MCP server for AI assistants; single-repo by default, opt-in multi-repo |
 | ⚡ | **Always fresh** | Three-tier incremental detection — sub-second rebuilds even on large codebases |
 
 See [docs/examples](docs/examples) for real-world CLI and MCP usage examples.
@@ -217,6 +217,9 @@ codegraph impact <file>        # Transitive reverse dependency trace
 codegraph fn <name>            # Function-level: callers, callees, call chain
 codegraph fn <name> --no-tests --depth 5
 codegraph fn-impact <name>     # What functions break if this one changes
+codegraph path <from> <to>     # Shortest path between two symbols (A calls...calls B)
+codegraph path <from> <to> --reverse  # Follow edges backward
+codegraph path <from> <to> --max-depth 5 --kinds calls,imports
 codegraph diff-impact          # Impact of unstaged git changes
 codegraph diff-impact --staged # Impact of staged changes
 codegraph diff-impact HEAD~3   # Impact vs a specific ref
@@ -316,7 +319,7 @@ codegraph registry remove <name>  # Unregister
 | Flag | Description |
 |---|---|
 | `-d, --db <path>` | Custom path to `graph.db` |
-| `-T, --no-tests` | Exclude `.test.`, `.spec.`, `__test__` files (available on `fn`, `fn-impact`, `context`, `explain`, `where`, `diff-impact`, `search`, `map`, `hotspots`, `deps`, `impact`) |
+| `-T, --no-tests` | Exclude `.test.`, `.spec.`, `__test__` files (available on `fn`, `fn-impact`, `path`, `context`, `explain`, `where`, `diff-impact`, `search`, `map`, `hotspots`, `roles`, `co-change`, `deps`, `impact`) |
 | `--depth <n>` | Transitive trace depth (default varies by command) |
 | `-j, --json` | Output as JSON |
 | `-v, --verbose` | Enable debug output |
@@ -428,7 +431,7 @@ Optional: `@huggingface/transformers` (semantic search), `@modelcontextprotocol/
 
 ### MCP Server
 
-Codegraph includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server with 19 tools, so AI assistants can query your dependency graph directly:
+Codegraph includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server with 21 tools (22 in multi-repo mode), so AI assistants can query your dependency graph directly:
 
 ```bash
 codegraph mcp                  # Single-repo mode (default) — only local project
@@ -462,7 +465,11 @@ This project uses codegraph. The database is at `.codegraph/graph.db`.
 - `codegraph build .` — rebuild the graph (incremental by default)
 - `codegraph map` — module overview
 - `codegraph fn <name> -T` — function call chain
+- `codegraph path <from> <to> -T` — shortest call path between two symbols
 - `codegraph deps <file>` — file-level dependencies
+- `codegraph roles --role dead -T` — find dead code (unreferenced symbols)
+- `codegraph roles --role core -T` — find core symbols (high fan-in)
+- `codegraph co-change <file>` — files that historically change together
 - `codegraph search "<query>"` — semantic search (requires `codegraph embed`)
 - `codegraph cycles` — check for circular dependencies
 

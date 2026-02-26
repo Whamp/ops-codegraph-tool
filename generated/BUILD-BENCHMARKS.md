@@ -27,6 +27,7 @@ Metrics are normalized per file for cross-version comparability.
 | DB size | 472 KB |
 | Files | 109 |
 
+
 #### WASM
 
 | Metric | Value |
@@ -49,6 +50,18 @@ Extrapolated linearly from per-file metrics above.
 | Nodes | 295,000 | 295,000 |
 | Edges | 485,000 | 485,000 |
 
+### Incremental Rebuilds
+
+| Version | Engine | No-op (ms) | 1-file (ms) |
+|---------|--------|----------:|-----------:|
+| 2.4.0 | wasm | 5 | 233 |
+
+### Query Latency
+
+| Version | Engine | fn-deps (ms) | fn-impact (ms) | path (ms) | roles (ms) |
+|---------|--------|------------:|--------------:|----------:|----------:|
+| 2.4.0 | wasm | 1.8 | 1.4 | 0.8 | 0.8 |
+
 <!-- BENCHMARK_DATA
 [
   {
@@ -66,6 +79,14 @@ Extrapolated linearly from per-file metrics above.
         "nodes": 5.9,
         "edges": 9.7,
         "dbSizeBytes": 4434
+      },
+      "noopRebuildMs": 5,
+      "oneFileRebuildMs": 233,
+      "queries": {
+        "fnDepsMs": 1.8,
+        "fnImpactMs": 1.4,
+        "pathMs": 0.8,
+        "rolesMs": 0.8
       }
     },
     "native": {
