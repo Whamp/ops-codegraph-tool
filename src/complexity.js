@@ -673,6 +673,7 @@ export function complexityData(customDbPath, opts = {}) {
     cognitive: { warn: 15, fail: null },
     cyclomatic: { warn: 10, fail: null },
     maxNesting: { warn: 4, fail: null },
+    maintainabilityIndex: { warn: 20, fail: null },
   };
 
   // Build query
@@ -699,19 +700,21 @@ export function complexityData(customDbPath, opts = {}) {
     params.push(kindFilter);
   }
 
+  const isValidThreshold = (v) => typeof v === 'number' && Number.isFinite(v);
+
   let having = '';
   if (aboveThreshold) {
     const conditions = [];
-    if (thresholds.cognitive?.warn != null) {
+    if (isValidThreshold(thresholds.cognitive?.warn)) {
       conditions.push(`fc.cognitive >= ${thresholds.cognitive.warn}`);
     }
-    if (thresholds.cyclomatic?.warn != null) {
+    if (isValidThreshold(thresholds.cyclomatic?.warn)) {
       conditions.push(`fc.cyclomatic >= ${thresholds.cyclomatic.warn}`);
     }
-    if (thresholds.maxNesting?.warn != null) {
+    if (isValidThreshold(thresholds.maxNesting?.warn)) {
       conditions.push(`fc.max_nesting >= ${thresholds.maxNesting.warn}`);
     }
-    if (thresholds.maintainabilityIndex?.warn != null) {
+    if (isValidThreshold(thresholds.maintainabilityIndex?.warn)) {
       conditions.push(
         `fc.maintainability_index > 0 AND fc.maintainability_index <= ${thresholds.maintainabilityIndex.warn}`,
       );
@@ -758,14 +761,17 @@ export function complexityData(customDbPath, opts = {}) {
 
   const functions = filtered.map((r) => {
     const exceeds = [];
-    if (thresholds.cognitive?.warn != null && r.cognitive >= thresholds.cognitive.warn)
+    if (isValidThreshold(thresholds.cognitive?.warn) && r.cognitive >= thresholds.cognitive.warn)
       exceeds.push('cognitive');
-    if (thresholds.cyclomatic?.warn != null && r.cyclomatic >= thresholds.cyclomatic.warn)
+    if (isValidThreshold(thresholds.cyclomatic?.warn) && r.cyclomatic >= thresholds.cyclomatic.warn)
       exceeds.push('cyclomatic');
-    if (thresholds.maxNesting?.warn != null && r.max_nesting >= thresholds.maxNesting.warn)
+    if (
+      isValidThreshold(thresholds.maxNesting?.warn) &&
+      r.max_nesting >= thresholds.maxNesting.warn
+    )
       exceeds.push('maxNesting');
     if (
-      thresholds.maintainabilityIndex?.warn != null &&
+      isValidThreshold(thresholds.maintainabilityIndex?.warn) &&
       r.maintainability_index > 0 &&
       r.maintainability_index <= thresholds.maintainabilityIndex.warn
     )
@@ -817,10 +823,13 @@ export function complexityData(customDbPath, opts = {}) {
         minMI: +Math.min(...miValues).toFixed(1),
         aboveWarn: allRows.filter(
           (r) =>
-            (thresholds.cognitive?.warn != null && r.cognitive >= thresholds.cognitive.warn) ||
-            (thresholds.cyclomatic?.warn != null && r.cyclomatic >= thresholds.cyclomatic.warn) ||
-            (thresholds.maxNesting?.warn != null && r.max_nesting >= thresholds.maxNesting.warn) ||
-            (thresholds.maintainabilityIndex?.warn != null &&
+            (isValidThreshold(thresholds.cognitive?.warn) &&
+              r.cognitive >= thresholds.cognitive.warn) ||
+            (isValidThreshold(thresholds.cyclomatic?.warn) &&
+              r.cyclomatic >= thresholds.cyclomatic.warn) ||
+            (isValidThreshold(thresholds.maxNesting?.warn) &&
+              r.max_nesting >= thresholds.maxNesting.warn) ||
+            (isValidThreshold(thresholds.maintainabilityIndex?.warn) &&
               r.maintainability_index > 0 &&
               r.maintainability_index <= thresholds.maintainabilityIndex.warn),
         ).length,
