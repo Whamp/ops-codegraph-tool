@@ -365,6 +365,22 @@ export function classifyNodeRoles(db) {
       .map((r) => r.target_id),
   );
 
+  // Compute production fan-in (excluding callers in test files)
+  const prodFanInMap = new Map();
+  const prodRows = db
+    .prepare(
+      `SELECT e.target_id, COUNT(*) AS cnt
+      FROM edges e
+      JOIN nodes caller ON e.source_id = caller.id
+      WHERE e.kind = 'calls'
+        ${testFilterSQL('caller.file')}
+      GROUP BY e.target_id`,
+    )
+    .all();
+  for (const r of prodRows) {
+    prodFanInMap.set(r.target_id, r.cnt);
+  }
+
   // Delegate classification to the pure-logic classifier
   const classifierInput = rows.map((r) => ({
     id: String(r.id),
@@ -372,6 +388,7 @@ export function classifyNodeRoles(db) {
     fanIn: r.fan_in,
     fanOut: r.fan_out,
     isExported: exportedIds.has(r.id),
+    productionFanIn: prodFanInMap.get(r.id) || 0,
   }));
 
   const roleMap = classifyRoles(classifierInput);
