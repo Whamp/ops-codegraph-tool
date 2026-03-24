@@ -19,6 +19,17 @@ import { initMcpDefaults } from './middleware.js';
 import { buildToolList } from './tool-registry.js';
 import { TOOL_HANDLERS } from './tools/index.js';
 
+export interface McpToolContext {
+  dbPath: string;
+  // biome-ignore lint/suspicious/noExplicitAny: lazy-loaded queries module
+  getQueries(): Promise<any>;
+  // biome-ignore lint/suspicious/noExplicitAny: lazy-loaded better-sqlite3 constructor
+  getDatabase(): any;
+  findDbPath: typeof findDbPath;
+  allowedRepos: string[] | undefined;
+  MCP_MAX_LIMIT: number;
+}
+
 interface MCPServerOptionsInternal extends MCPServerOptions {
   config?: CodegraphConfig;
 }
