@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > **Hooks enforce code quality.** This project uses Claude Code hooks (`.claude/hooks/`) to automatically inject file-level dependency context on reads, rebuild the graph after edits, block commits with cycles or dead exports, run lint on staged files, and show diff-impact before commits. If codegraph reports an error or produces wrong results when analyzing itself, **that's a real bug** — don't work around it or ignore it. Flag it to the user and, if it's blocking the current task, fix it.
 
+> **Never fabricate facts.** Do not state licenses, version numbers, feature claims, or any factual information without first verifying it (read the file, run the command, check the source). If you don't know, say so — do not guess.
+
 > **Never document bugs as expected behavior.** If two engines (native vs WASM) produce different results, that is a bug in the less-accurate engine — not an acceptable "parity gap." Adding comments or tests that frame wrong output as "expected" blocks future agents from ever fixing it. Instead: identify the root cause, file an issue, and fix the extraction/resolution layer that produces incorrect results. The correct response to "engine A reports 8 cycles, engine B reports 11" is to fix the 3 false cycles in engine B, not to document why the difference is okay.
 
 ## Codegraph Workflow
