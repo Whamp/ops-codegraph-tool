@@ -36,6 +36,20 @@ const STOPWORDS = new Set([
   'with',
 ]);
 
+export type QueryMode = 'term' | 'intent' | 'hyde';
+
+export interface QueryModeInput {
+  mode: QueryMode;
+  text: string;
+}
+
+export interface StructuredQueryNormalization {
+  query: string;
+  queryModes: QueryModeInput[];
+  usedStructuredQuerySyntax: boolean;
+  derivedQuery: boolean;
+}
+
 export interface ExpansionResult {
   lexicalQueries: string[];
   vectorQueries: string[];
@@ -54,6 +68,7 @@ export interface QueryExpansionOptions {
   enabled?: boolean;
   provider?: ExpansionProvider;
   timeoutMs?: number;
+  queryModes?: QueryModeInput[];
 }
 
 export interface RoutedQueries {
@@ -208,6 +223,171 @@ function buildAnchorLexicalQuery(query: string, signals: QuerySignals): string {
   return dedupeStrings(parts).join(' ').trim() || query.trim();
 }
 
+const QUERY_MODE_ENTRY = /^\s*(term|intent|hyde)\s*:\s*([\s\S]*\S[\s\S]*)\s*$/i;
+const ANY_PREFIX_PATTERN = /^\s*([a-z][a-z0-9_-]*)\s*:\s*(.*)$/i;
+const RECOGNIZED_PREFIX_PATTERN = /^\s*(term|intent|hyde)\s*:\s*(.*)$/i;
+const RECOGNIZED_MODE_PREFIXES = new Set(['term', 'intent', 'hyde']);
+
+function structuredQueryError(message: string, line?: number | null): Error {
+  return new Error(line == null ? message : `Structured query line ${line}: ${message}`);
+}
+
+export function parseQueryModeSpec(spec: string): QueryModeInput {
+  const prefix = spec.match(/^\s*([a-z][a-z0-9_-]*)\s*:/i)?.[1]?.toLowerCase();
+  const match = spec.match(QUERY_MODE_ENTRY);
+  if (!match) {
+    if (prefix && RECOGNIZED_MODE_PREFIXES.has(prefix)) {
+      throw new Error(
+        `Invalid --query-mode value "${spec}". Expected non-empty text after ${prefix}:`,
+      );
+    }
+    throw new Error(
+      `Invalid --query-mode value "${spec}". Expected "term:<text>", "intent:<text>", or "hyde:<text>".`,
+    );
+  }
+  return { mode: match[1]!.toLowerCase() as QueryMode, text: match[2]!.trim() };
+}
+
+function normalizeQueryModeEntries(queryModes: QueryModeInput[]): QueryModeInput[] {
+  return queryModes.map((entry) => ({
+    mode: entry.mode,
+    text: entry.text.trim(),
+  }));
+}
+
+function validateQueryModeShape(queryModes: QueryModeInput[]): QueryModeInput[] {
+  const normalized = normalizeQueryModeEntries(queryModes);
+  for (const entry of normalized) {
+    if (!RECOGNIZED_MODE_PREFIXES.has(entry.mode) || !entry.text) {
+      throw new Error('Query modes must use term, intent, or hyde with non-empty text.');
+    }
+  }
+  if (normalized.filter((entry) => entry.mode === 'hyde').length > 1) {
+    throw new Error('Only one hyde mode is allowed in structured query input.');
+  }
+  return normalized;
+}
+
+export function validateQueryModes(queryModes: QueryModeInput[]): QueryModeInput[] {
+  const normalized = validateQueryModeShape(queryModes);
+  if (normalized.length > 0 && normalized.every((entry) => entry.mode === 'hyde')) {
+    throw new Error('HyDE-only inputs are not allowed; include a plain query, term, or intent.');
+  }
+  return normalized;
+}
+
+export function parseQueryModeSpecs(specs: string[]): QueryModeInput[] {
+  return validateQueryModeShape(specs.map((spec) => parseQueryModeSpec(spec)));
+}
+
+export function normalizeStructuredQueryInput(
+  query: string,
+  explicitQueryModes: QueryModeInput[] = [],
+): StructuredQueryNormalization {
+  const explicit = validateQueryModeShape(explicitQueryModes);
+  if (!query.includes('\n')) {
+    return { query, queryModes: explicit, usedStructuredQuerySyntax: false, derivedQuery: false };
+  }
+
+  const nonBlankLines = query.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (nonBlankLines.length === 0) {
+    return { query, queryModes: explicit, usedStructuredQuerySyntax: false, derivedQuery: false };
+  }
+
+  const hasTypedLine = nonBlankLines.some((line) => ANY_PREFIX_PATTERN.test(line.trim()));
+  if (!hasTypedLine) {
+    return { query, queryModes: explicit, usedStructuredQuerySyntax: false, derivedQuery: false };
+  }
+
+  const queryModes: QueryModeInput[] = [];
+  const bodyLines: string[] = [];
+  let hydeCount = 0;
+
+  for (const [index, line] of query.split(/\r?\n/).entries()) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const recognized = trimmed.match(RECOGNIZED_PREFIX_PATTERN);
+    if (recognized) {
+      const mode = recognized[1]!.toLowerCase() as QueryMode;
+      const text = recognized[2]?.trim() ?? '';
+      if (!text)
+        throw structuredQueryError(`line ${index + 1} must contain non-empty text after ${mode}:`);
+      if (mode === 'hyde') {
+        hydeCount += 1;
+        if (hydeCount > 1)
+          throw structuredQueryError(
+            'Only one hyde line is allowed in a structured query document.',
+            index + 1,
+          );
+      }
+      queryModes.push({ mode, text });
+      continue;
+    }
+
+    const prefixed = trimmed.match(ANY_PREFIX_PATTERN);
+    if (prefixed?.[1]) {
+      const prefix = prefixed[1].toLowerCase();
+      if (!RECOGNIZED_MODE_PREFIXES.has(prefix)) {
+        throw structuredQueryError(
+          `Unknown structured query line prefix "${prefix}:" on line ${index + 1}. Expected term:, intent:, or hyde:.`,
+          index + 1,
+        );
+      }
+    }
+    bodyLines.push(trimmed);
+  }
+
+  const combinedQueryModes = normalizeQueryModeEntries([...queryModes, ...explicit]);
+  if (combinedQueryModes.filter((entry) => entry.mode === 'hyde').length > 1) {
+    throw new Error(
+      'Only one hyde entry is allowed across structured query syntax and explicit query modes.',
+    );
+  }
+  let normalizedQuery = bodyLines.join(' ').trim();
+  let derivedQuery = false;
+  if (!normalizedQuery) {
+    normalizedQuery = queryModes
+      .filter((entry) => entry.mode === 'term')
+      .map((entry) => entry.text)
+      .join(' ')
+      .trim();
+    if (!normalizedQuery) {
+      normalizedQuery = queryModes
+        .filter((entry) => entry.mode === 'intent')
+        .map((entry) => entry.text)
+        .join(' ')
+        .trim();
+    }
+    derivedQuery = normalizedQuery.length > 0;
+  }
+  if (!normalizedQuery) {
+    throw new Error(
+      'Structured query documents must include at least one plain query line, term line, or intent line. hyde-only documents are not allowed.',
+    );
+  }
+
+  return {
+    query: normalizedQuery,
+    queryModes: combinedQueryModes,
+    usedStructuredQuerySyntax: true,
+    derivedQuery,
+  };
+}
+
+export function buildExpansionFromQueryModes(queryModes: QueryModeInput[]): ExpansionResult | null {
+  if (queryModes.length === 0) return null;
+  const valid = validateQueryModeShape(queryModes);
+  const lexicalQueries = dedupeStrings(
+    valid.filter((entry) => entry.mode === 'term').map((entry) => entry.text),
+  ).slice(0, MAX_VARIANTS);
+  const vectorQueries = dedupeStrings(
+    valid.filter((entry) => entry.mode === 'intent').map((entry) => entry.text),
+  ).slice(0, MAX_VARIANTS);
+  const hyde = valid.find((entry) => entry.mode === 'hyde')?.text;
+  return { lexicalQueries, vectorQueries, ...(hyde ? { hyde } : {}) };
+}
+
 export function applyExpansionGuardrails(
   query: string,
   expansion: ExpansionResult,
@@ -321,6 +501,19 @@ export async function routeExpandedQueries(
   bm25ProbeResults: Bm25SignalResult[],
 ): Promise<RoutedQueries> {
   const original = query.trim();
+  const queryModeExpansion = buildExpansionFromQueryModes(options.queryModes ?? []);
+  if (queryModeExpansion) {
+    return {
+      bm25Queries: dedupeStrings([original, ...queryModeExpansion.lexicalQueries]),
+      semanticQueries: dedupeStrings([
+        original,
+        ...queryModeExpansion.vectorQueries,
+        ...(queryModeExpansion.hyde ? [queryModeExpansion.hyde] : []),
+      ]),
+      expansion: queryModeExpansion,
+      skipped: null,
+    };
+  }
   if (!options.enabled) {
     return {
       bm25Queries: [original],

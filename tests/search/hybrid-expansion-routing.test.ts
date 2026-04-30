@@ -57,4 +57,46 @@ describe('hybrid expansion routing', () => {
       expect.objectContaining({ limit: 5 }),
     );
   });
+
+  test('structured query modes bypass generation and route term separately from intent and hyde', async () => {
+    const provider = { generate: vi.fn(async () => '{}') };
+
+    await hybridSearchData('auth flow', 'codegraph.db', {
+      limit: 1,
+      expand: true,
+      expansionProvider: provider,
+      queryModes: [
+        { mode: 'term', text: '"refresh token"' },
+        { mode: 'intent', text: 'token rotation behavior' },
+        { mode: 'hyde', text: 'Refresh tokens rotate on each use.' },
+      ],
+    });
+
+    expect(provider.generate).not.toHaveBeenCalled();
+    expect(mocks.ftsSearchData).toHaveBeenCalledWith(
+      'auth flow',
+      'codegraph.db',
+      expect.objectContaining({ limit: 5 }),
+    );
+    expect(mocks.ftsSearchData).toHaveBeenCalledWith(
+      '"refresh token"',
+      'codegraph.db',
+      expect.objectContaining({ limit: 5 }),
+    );
+    expect(mocks.searchData).toHaveBeenCalledWith(
+      'auth flow',
+      'codegraph.db',
+      expect.objectContaining({ limit: 5 }),
+    );
+    expect(mocks.searchData).toHaveBeenCalledWith(
+      'token rotation behavior',
+      'codegraph.db',
+      expect.objectContaining({ limit: 5 }),
+    );
+    expect(mocks.searchData).toHaveBeenCalledWith(
+      'Refresh tokens rotate on each use.',
+      'codegraph.db',
+      expect.objectContaining({ limit: 5 }),
+    );
+  });
 });
