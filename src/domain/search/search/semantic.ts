@@ -26,7 +26,11 @@ export interface SemanticSearchOpts {
   queryModes?: QueryModeInput[];
   queryTextKind?: QueryTextKind;
   explain?: boolean;
-  /** Injected rerank port for cross-encoder reranking (default-off unless provided + config enabled) */
+  /** Enable/disable hybrid reranking for this request. Undefined uses config. */
+  rerank?: boolean;
+  /** Override the number of fused candidates eligible for reranking. */
+  rerankCandidates?: number;
+  /** Optional injected rerank port for tests/custom cross-encoder reranking. */
   rerankPort?: import('./rerank.js').RerankPort;
 }
 

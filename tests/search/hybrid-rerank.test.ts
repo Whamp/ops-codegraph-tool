@@ -103,7 +103,7 @@ describe('hybrid search with reranking', () => {
     }
   });
 
-  test('skips reranking when rerank is disabled in config', async () => {
+  test('skips reranking by default when rerank is disabled in config', async () => {
     mocks.ftsSearchData.mockReturnValue({ results: [bm25Result('alpha')] });
     mocks.searchData.mockResolvedValue({ results: [vectorResult('beta')] });
 
@@ -120,6 +120,57 @@ describe('hybrid search with reranking', () => {
 
     const data = await hybridSearchData('test query', 'codegraph.db', {
       config: disabledConfig as any,
+      rerankPort: mockPort,
+      explain: true,
+    });
+
+    expect(data?.results).toBeDefined();
+    for (const r of data?.results ?? []) {
+      expect(r.rerank).toBeUndefined();
+    }
+  });
+
+  test('allows request-level rerank true to enable reranking when config default is disabled', async () => {
+    mocks.ftsSearchData.mockReturnValue({ results: [bm25Result('alpha')] });
+    mocks.searchData.mockResolvedValue({ results: [vectorResult('beta')] });
+
+    const disabledConfig = {
+      ...mockConfig,
+      search: { ...mockConfig.search, rerank: { ...mockConfig.search.rerank, enabled: false } },
+    };
+
+    const mockPort: RerankPort = {
+      async rerank(_query: string, documents: string[]) {
+        return {
+          ok: true as const,
+          value: documents.map((_, i) => ({ index: i, score: 0.5 })),
+        };
+      },
+    };
+
+    const data = await hybridSearchData('test query', 'codegraph.db', {
+      config: disabledConfig as any,
+      rerank: true,
+      rerankPort: mockPort,
+      explain: true,
+    });
+
+    expect(data?.results.some((r) => r.rerank !== undefined)).toBe(true);
+  });
+
+  test('allows request-level rerank false to disable reranking when config default is enabled', async () => {
+    mocks.ftsSearchData.mockReturnValue({ results: [bm25Result('alpha')] });
+    mocks.searchData.mockResolvedValue({ results: [vectorResult('beta')] });
+
+    const mockPort: RerankPort = {
+      async rerank() {
+        throw new Error('should not be called');
+      },
+    };
+
+    const data = await hybridSearchData('test query', 'codegraph.db', {
+      config: mockConfig as any,
+      rerank: false,
       rerankPort: mockPort,
       explain: true,
     });
