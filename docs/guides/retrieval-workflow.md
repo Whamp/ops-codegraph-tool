@@ -145,13 +145,7 @@ file:///absolute/path/model.gguf
 /absolute/path/model.gguf
 ```
 
-Local GGUF embedding requires the optional runtime:
-
-```bash
-npm install node-llama-cpp
-```
-
-If the runtime is not installed and a GGUF model is selected, Codegraph reports that `node-llama-cpp` is required. Users who only build graphs, run keyword search, or use transformer embeddings do not need this dependency.
+Local GGUF embedding uses the bundled `node-llama-cpp` runtime. This fork treats GNO/Qwen GGUF retrieval as the default path, so installation should fail hard if the runtime cannot be installed.
 
 Codegraph validates cached GGUF files before use. If a file is missing the `GGUF` magic header, or appears to be HTML from a proxy/login page, remove the bad file and download/cache it again.
 
@@ -193,8 +187,8 @@ Transformer models are loaded through `@huggingface/transformers`; that runtime 
 
 ## Optional dependencies and fallback behavior
 
+- `node-llama-cpp` is a hard dependency because GNO/Qwen GGUF retrieval is the default path in this fork. The runtime is still lazy-loaded, so graph-only commands do not initialize llama.cpp.
 - `@huggingface/transformers` is optional and lazy-loaded for transformer embeddings. If missing, Codegraph prompts in TTY sessions or attempts non-interactive install; otherwise it tells you to install it.
-- `node-llama-cpp` is optional and only needed for GGUF models.
 - `sqlite-vec` support is optional. When vector acceleration is unavailable, Codegraph stores vectors in SQLite and semantic search falls back to brute-force vector comparison.
 - Reranking is optional. Without a supported HTTP rerank endpoint, hybrid search skips reranking. If a configured rerank endpoint fails, hybrid search falls back to fusion-only results.
 
@@ -287,7 +281,7 @@ Use `--explain --json` to inspect source contributions (`bm25`, `bm25_variant`, 
 | Search results do not reflect moved/deleted files | Run `codegraph build --no-incremental`, then re-embed. |
 | GGUF model is not cached in offline mode | Add it to `~/.codegraph/models`, add a manifest entry, use `file:`, or disable offline mode intentionally. |
 | GGUF file looks like HTML or is missing the GGUF header | Delete the bad file and re-download through an authenticated/unblocked network path. |
-| `node-llama-cpp` missing | Install it only if using GGUF models: `npm install node-llama-cpp`. |
+| `node-llama-cpp` missing | Reinstall Codegraph so the hard runtime dependency is restored, or check the package manager/native build error. |
 | Transformer runtime missing | Install `@huggingface/transformers` if using transformer embeddings. |
 | HTTP embedding returns the wrong number of vectors | Fix the backend to return one `data[*].embedding` per input, with correct `index` values if reordering. |
 | Reranker unavailable | Disable reranking or configure a supported HTTP rerank endpoint; fusion-only search still works. |
