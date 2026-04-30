@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, MODELS } from '../../domain/search/index.js';
+import { DEFAULT_MODEL, MODELS, resolveModelRoleUri } from '../../domain/search/index.js';
 import type { CommandDefinition } from '../types.js';
 
 export const command: CommandDefinition = {
@@ -7,23 +7,31 @@ export const command: CommandDefinition = {
   execute(_args, _opts, ctx) {
     const embeddingsConfig = ctx.config.embeddings;
     const defaultModel = (embeddingsConfig?.model as string) || DEFAULT_MODEL;
+    const defaultRoleModel = resolveModelRoleUri(ctx.config, 'embed');
     console.log('\nAvailable embedding models:\n');
 
     interface ModelEntry {
       dim: number;
       desc: string;
       contextWindow?: number;
+      name: string;
     }
 
     for (const [key, cfg] of Object.entries(MODELS)) {
-      const def = key === defaultModel ? ' (default)' : '';
       const modelCfg = cfg as ModelEntry;
+      const def = key === defaultModel || modelCfg.name === defaultRoleModel ? ' (default)' : '';
       const ctxWindow = modelCfg.contextWindow ? `${modelCfg.contextWindow} ctx` : '';
       console.log(
         `  ${key.padEnd(12)} ${String(modelCfg.dim).padStart(4)}d  ${ctxWindow.padEnd(9)} ${modelCfg.desc}${def}`,
       );
     }
-    console.log('\nUsage: codegraph embed --model <name> --strategy <structured|source>');
-    console.log('       codegraph search "query" --model <name>\n');
+    if (
+      !MODELS[defaultModel] &&
+      !Object.values(MODELS).some((cfg) => cfg.name === defaultRoleModel)
+    ) {
+      console.log(`\nDefault embedding role: ${defaultRoleModel}`);
+    }
+    console.log('\nUsage: codegraph embed --model <name-or-uri> --strategy <structured|source>');
+    console.log('       codegraph search "query" --model <name-or-uri>\n');
   },
 };

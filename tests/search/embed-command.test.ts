@@ -55,12 +55,12 @@ describe('embed command model compatibility', () => {
     );
   });
 
-  test('uses implicit supported role model names without falling back', async () => {
+  test('routes implicit GNO/Qwen default embed URI through buildEmbeddings', async () => {
     await command.execute?.(['.'], { strategy: 'structured' }, ctx());
 
     expect(buildEmbeddingsMock).toHaveBeenCalledWith(
       expect.any(String),
-      'nomic-ai/nomic-embed-text-v1.5',
+      'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
       undefined,
       { strategy: 'structured' },
     );

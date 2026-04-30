@@ -78,8 +78,13 @@ export const MODELS: Record<string, ModelConfig> = {
 
 export const EMBEDDING_STRATEGIES: readonly string[] = ['structured', 'source'];
 
-export const DEFAULT_MODEL: string = 'nomic-v1.5';
-export const DEFAULT_RETRIEVAL_PRESET = 'codegraph-default';
+export const GNO_COMPACT_EMBEDDING_MODEL =
+  'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf';
+export const DEFAULT_EMBEDDING_MODEL = GNO_COMPACT_EMBEDDING_MODEL;
+export const LEGACY_TRANSFORMER_DEFAULT_MODEL = 'nomic-v1.5';
+export const DEFAULT_MODEL: string = DEFAULT_EMBEDDING_MODEL;
+export const DEFAULT_RETRIEVAL_PRESET = 'gno-compact';
+export const LEGACY_RETRIEVAL_PRESET = 'codegraph-default';
 
 export interface RetrievalModelPreset {
   name: string;
@@ -94,21 +99,21 @@ export interface ResolvedRetrievalModels {
 }
 
 export const RETRIEVAL_MODEL_PRESETS: Record<string, RetrievalModelPreset> = {
-  [DEFAULT_RETRIEVAL_PRESET]: {
-    name: DEFAULT_RETRIEVAL_PRESET,
-    desc: 'Compatibility default: current Codegraph embedding model plus GNO-inspired retrieval roles.',
+  [LEGACY_RETRIEVAL_PRESET]: {
+    name: LEGACY_RETRIEVAL_PRESET,
+    desc: 'Legacy compatibility preset: previous Codegraph embedding model plus GNO-inspired retrieval roles.',
     roles: {
-      embed: MODELS[DEFAULT_MODEL]!.name,
+      embed: MODELS[LEGACY_TRANSFORMER_DEFAULT_MODEL]!.name,
       rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
       expand: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
       gen: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
     },
   },
-  'gno-compact': {
-    name: 'gno-compact',
+  [DEFAULT_RETRIEVAL_PRESET]: {
+    name: DEFAULT_RETRIEVAL_PRESET,
     desc: 'Compact GNO-inspired local retrieval model roles.',
     roles: {
-      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+      embed: GNO_COMPACT_EMBEDDING_MODEL,
       rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
       expand: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
       gen: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
@@ -118,7 +123,7 @@ export const RETRIEVAL_MODEL_PRESETS: Record<string, RetrievalModelPreset> = {
     name: 'gno-balanced',
     desc: 'Balanced GNO-inspired retrieval model roles.',
     roles: {
-      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+      embed: GNO_COMPACT_EMBEDDING_MODEL,
       rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
       expand: 'hf:bartowski/Qwen2.5-3B-Instruct-GGUF/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
       gen: 'hf:bartowski/Qwen2.5-3B-Instruct-GGUF/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
@@ -128,7 +133,7 @@ export const RETRIEVAL_MODEL_PRESETS: Record<string, RetrievalModelPreset> = {
     name: 'gno-quality',
     desc: 'Quality-oriented GNO-inspired retrieval model roles.',
     roles: {
-      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+      embed: GNO_COMPACT_EMBEDDING_MODEL,
       rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
       expand: 'hf:unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
       gen: 'hf:unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
@@ -183,11 +188,11 @@ export function getEmbeddingModelConfig(modelKey?: string): ModelConfig {
   };
 }
 
-function resolveLegacyEmbeddingUri(config?: CodegraphConfig): string | undefined {
-  const legacyModel = config?.embeddings?.model;
-  if (!legacyModel) return undefined;
-  const key = resolveModelKey(legacyModel);
-  return MODELS[key]?.name ?? legacyModel;
+function resolveConfiguredEmbeddingUri(config?: CodegraphConfig): string | undefined {
+  const configuredModel = config?.embeddings?.model;
+  if (!configuredModel || configuredModel === DEFAULT_EMBEDDING_MODEL) return undefined;
+  const key = resolveModelKey(configuredModel);
+  return MODELS[key]?.name ?? configuredModel;
 }
 
 export function resolveRetrievalModels(config?: CodegraphConfig): ResolvedRetrievalModels {
@@ -197,12 +202,16 @@ export function resolveRetrievalModels(config?: CodegraphConfig): ResolvedRetrie
   const roles: ModelRoleMap = { ...preset.roles };
   const overrides = config?.models?.roles;
 
-  const selectedNonDefaultPreset =
-    requestedPreset !== DEFAULT_RETRIEVAL_PRESET && preset.name === requestedPreset;
-  const legacyEmbed = selectedNonDefaultPreset ? undefined : resolveLegacyEmbeddingUri(config);
+  const selectedBuiltInPresetWithOwnEmbedding =
+    requestedPreset !== DEFAULT_RETRIEVAL_PRESET &&
+    requestedPreset !== LEGACY_RETRIEVAL_PRESET &&
+    preset.name === requestedPreset;
+  const configuredEmbed = selectedBuiltInPresetWithOwnEmbedding
+    ? undefined
+    : resolveConfiguredEmbeddingUri(config);
   const hasEmbedOverride = overrides?.embed != null;
-  if (legacyEmbed && !hasEmbedOverride) {
-    roles.embed = legacyEmbed;
+  if (configuredEmbed && !hasEmbedOverride) {
+    roles.embed = configuredEmbed;
   }
 
   if (overrides) {

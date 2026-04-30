@@ -2,7 +2,7 @@
 
 This guide covers Codegraph's current retrieval workflow for semantic and hybrid search: model roles, embedding, cache policy, query expansion, reranking, stale-vector recovery, and migration from legacy config.
 
-The default embedding model remains `nomic-v1.5`. Issue #13 owns any future default-model decision.
+Issue #13 decision: Codegraph now uses the GNO/Qwen compact defaults for all retrieval roles. The default preset is `gno-compact`, and the default embedding role is `hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf`.
 
 ## Quick workflow
 
@@ -29,8 +29,8 @@ Codegraph resolves retrieval models by role:
 
 Built-in presets are defined in `src/domain/search/models.ts`:
 
-- `codegraph-default` — compatibility preset. It keeps the current Codegraph embedding default (`nomic-v1.5`) and wires GNO-inspired retrieval roles for the optional stages.
-- `gno-compact` — compact local Qwen/GGUF embedding, rerank, expansion, and generation roles.
+- `gno-compact` — default compact local Qwen/GGUF embedding, rerank, expansion, and generation roles.
+- `codegraph-default` — legacy compatibility preset. It keeps the previous Codegraph embedding default (`nomic-v1.5`) and wires GNO-inspired retrieval roles for the optional stages.
 - `gno-balanced` — Qwen embedding/rerank with a larger expansion/generation role.
 - `gno-quality` — Qwen embedding/rerank with the largest built-in expansion/generation role.
 
@@ -62,7 +62,7 @@ Existing single-model config still works:
 }
 ```
 
-When the selected preset is `codegraph-default`, `embeddings.model` is treated as the embedding role unless `models.roles.embed` is set. Non-default presets use their preset embedding role unless explicitly overridden. The `codegraph embed --model <name-or-uri>` flag overrides config for that embedding run. `codegraph search --model <name-or-uri>` can override the query embedding model for a search, but normal use should let search auto-detect the model recorded during `embed`.
+Existing configs keep working after the default switch: an explicit `embeddings.model` value such as `nomic-v1.5` is treated as the embedding role unless `models.roles.embed` is set. Other non-default presets use their preset embedding role unless explicitly overridden. To retain the full previous behavior, set `models.preset` to `codegraph-default` and re-run `codegraph embed`. The `codegraph embed --model <name-or-uri>` flag overrides config for that embedding run. `codegraph search --model <name-or-uri>` can override the query embedding model for a search, but normal use should let search auto-detect the model recorded during `embed`.
 
 ## Embedding and re-embedding
 

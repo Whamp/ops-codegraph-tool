@@ -30,9 +30,12 @@ export const DEFAULTS = {
     defaultLimit: 20,
     excludeTests: false,
   },
-  embeddings: { model: 'nomic-v1.5', llmProvider: null as string | null },
+  embeddings: {
+    model: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+    llmProvider: null as string | null,
+  },
   models: {
-    preset: 'codegraph-default',
+    preset: 'gno-compact',
     roles: {} as Partial<Record<'embed' | 'rerank' | 'expand' | 'gen', string>>,
   },
   llm: {
