@@ -81,14 +81,21 @@ describe('MCP semantic_search pipeline parity', () => {
     });
   });
 
-  it('falls back from hybrid to semantic when FTS is unavailable', async () => {
+  it('falls back from hybrid to semantic with metadata when FTS is unavailable', async () => {
     hybridSearchData.mockResolvedValue(null);
     searchData.mockResolvedValue({ results: [{ name: 'semanticHit', similarity: 0.9 }] });
     const { handler } = await import('../../src/mcp/tools/semantic-search.js');
 
     const result = await handler({ query: 'auth' }, ctx);
 
-    expect(result).toEqual({ results: [{ name: 'semanticHit', similarity: 0.9 }] });
+    expect(result).toEqual({
+      results: [{ name: 'semanticHit', similarity: 0.9 }],
+      fallback: {
+        mode: 'semantic',
+        reason: 'FTS5 hybrid index unavailable',
+        message: expect.stringContaining('returned semantic-only results'),
+      },
+    });
     expect(searchData).toHaveBeenCalledWith('auth', '/tmp/codegraph.db', expect.any(Object));
   });
 

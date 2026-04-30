@@ -302,8 +302,7 @@ async function applyReranking(
 ): Promise<AppliedReranking> {
   const rerankMetaBykey = new Map<string, RerankResultMeta>();
 
-  const rerankEnabled = searchCfg.rerank?.enabled ?? false;
-  if (!rerankPort || !rerankEnabled) return { metaByKey: rerankMetaBykey, orderedKeys: null };
+  if (!rerankPort) return { metaByKey: rerankMetaBykey, orderedKeys: null };
 
   const maxCandidates =
     opts.rerankCandidates ??
@@ -388,7 +387,7 @@ export async function hybridSearchData(
       searchCfg.nearTopRankBonusMultiplier ?? DEFAULTS.search.nearTopRankBonusMultiplier,
   });
 
-  // Apply reranking when config enables it, using an injected port or safe default HTTP port.
+  // Apply reranking when the effective request/config decision enables it, using an injected port or safe default HTTP port.
   let rerankPort = (opts as SemanticSearchOpts & { rerankPort?: RerankPort }).rerankPort;
   let rerankMetaBykey = new Map<string, RerankResultMeta>();
   let orderedRerankKeys: string[] | null = null;

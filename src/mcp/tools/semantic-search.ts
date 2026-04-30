@@ -177,7 +177,17 @@ export async function handler(args: SemanticSearchArgs, ctx: McpToolContext): Pr
   }
 
   const semantic = await searchData(input.query, ctx.dbPath, searchOpts).catch(() => null);
-  if (semantic !== null) return semantic;
+  if (semantic !== null) {
+    return {
+      ...semantic,
+      fallback: {
+        mode: 'semantic',
+        reason: 'FTS5 hybrid index unavailable',
+        message:
+          'Hybrid search unavailable because the FTS5 keyword index is missing; returned semantic-only results.',
+      },
+    };
+  }
 
   const keyword = ftsSearchData(input.query, ctx.dbPath, searchOpts);
   if (keyword !== null) {

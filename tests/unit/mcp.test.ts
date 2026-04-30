@@ -167,6 +167,10 @@ describe('TOOLS', () => {
     expect(ss.inputSchema.properties).toHaveProperty('no_rerank');
     expect(ss.inputSchema.properties).toHaveProperty('rerank_candidates');
     expect(ss.inputSchema.properties).toHaveProperty('query_mode');
+    expect(ss.inputSchema.properties.query_mode.oneOf).toEqual([
+      { type: 'string' },
+      { type: 'array', items: { type: 'string' } },
+    ]);
     expect(ss.inputSchema.properties).toHaveProperty('query_modes');
     expect(ss.inputSchema.properties).toHaveProperty('explain');
   });

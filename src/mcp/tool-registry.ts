@@ -334,8 +334,7 @@ const BASE_TOOLS: ToolSchema[] = [
         },
         rrf_k: { type: 'number', description: 'RRF k parameter for hybrid fusion' },
         query_mode: {
-          type: 'array',
-          items: { type: 'string' },
+          oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
           description: 'Structured query mode entries: term:<text>, intent:<text>, or hyde:<text>',
         },
         query_modes: {
