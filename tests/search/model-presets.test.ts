@@ -3,6 +3,7 @@ import {
   DEFAULT_MODEL,
   DEFAULT_RETRIEVAL_PRESET,
   MODELS,
+  RETRIEVAL_MODEL_PRESETS,
   resolveModelRoleUri,
   resolveRetrievalModels,
 } from '../../src/domain/search/index.js';
@@ -27,6 +28,18 @@ describe('retrieval model role resolution', () => {
     expect(resolved.roles.rerank).toContain('Reranker');
     expect(resolved.roles.expand).toContain('Qwen');
     expect(resolved.roles.gen).toContain('Qwen');
+  });
+
+  test('resolves non-default preset embed role with merged default config shape', () => {
+    const resolved = resolveRetrievalModels({
+      ...(DEFAULTS as CodegraphConfig),
+      embeddings: { ...DEFAULTS.embeddings },
+      models: { ...DEFAULTS.models, preset: 'gno-compact' },
+    });
+
+    expect(resolved.preset).toBe('gno-compact');
+    expect(resolved.roles.embed).toBe(RETRIEVAL_MODEL_PRESETS['gno-compact']!.roles.embed);
+    expect(resolved.roles.embed).not.toBe(MODELS[DEFAULT_MODEL]!.name);
   });
 
   test('applies config role overrides on top of the selected built-in preset', () => {

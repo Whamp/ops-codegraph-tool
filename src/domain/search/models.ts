@@ -178,7 +178,9 @@ export function resolveRetrievalModels(config?: CodegraphConfig): ResolvedRetrie
   const roles: ModelRoleMap = { ...preset.roles };
   const overrides = config?.models?.roles;
 
-  const legacyEmbed = resolveLegacyEmbeddingUri(config);
+  const selectedNonDefaultPreset =
+    requestedPreset !== DEFAULT_RETRIEVAL_PRESET && preset.name === requestedPreset;
+  const legacyEmbed = selectedNonDefaultPreset ? undefined : resolveLegacyEmbeddingUri(config);
   const hasEmbedOverride = overrides?.embed != null;
   if (legacyEmbed && !hasEmbedOverride) {
     roles.embed = legacyEmbed;
