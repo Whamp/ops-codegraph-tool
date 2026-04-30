@@ -105,6 +105,39 @@ describe('embedWithRecovery', () => {
 });
 
 describe('buildEmbeddings embedding port integration', () => {
+  test('uses legacy transformer model-specific batch sizes with the port-backed builder path', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-port-batch-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, 'math.js'), 'export function f0() {}\n');
+      fs.mkdirSync(path.join(tmpDir, '.codegraph'), { recursive: true });
+      const dbPath = path.join(tmpDir, '.codegraph', 'graph.db');
+      const db = new Database(dbPath);
+      initSchema(db);
+      const insert = db.prepare(
+        'INSERT INTO nodes (name, kind, file, line, end_line) VALUES (?, ?, ?, ?, ?)',
+      );
+      for (let i = 0; i < 9; i++) insert.run(`f${i}`, 'function', 'math.js', 1, 1);
+      db.close();
+
+      const calls: number[] = [];
+      const port: EmbeddingPort = {
+        embedBatch: vi.fn(async (texts) => {
+          calls.push(texts.length);
+          return texts.map((_, index) => vec(index));
+        }),
+      };
+
+      await buildEmbeddings(tmpDir, 'nomic-v1.5', dbPath, {
+        strategy: 'structured',
+        embeddingPort: port,
+      });
+
+      expect(calls).toEqual([8, 1]);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   test('stores vectors and FTS rows from a mocked embedding port', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-port-integration-'));
     try {

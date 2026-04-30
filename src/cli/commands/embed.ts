@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { isHttpModelUri } from '../../domain/search/http-embedding.js';
 import {
   buildEmbeddings,
   DEFAULT_MODEL,
@@ -6,11 +7,17 @@ import {
   MODELS,
   resolveModelRoleUri,
 } from '../../domain/search/index.js';
+import { isGgufModelUri } from '../../domain/search/model-cache.js';
 import { warn } from '../../infrastructure/logger.js';
 import type { CommandDefinition } from '../types.js';
 
-function isLegacyEmbeddingModel(model: string): boolean {
-  return MODELS[model] != null || Object.values(MODELS).some((config) => config.name === model);
+function isSupportedEmbeddingModel(model: string): boolean {
+  return (
+    MODELS[model] != null ||
+    Object.values(MODELS).some((config) => config.name === model) ||
+    isHttpModelUri(model) ||
+    isGgufModelUri(model)
+  );
 }
 
 function resolveEmbedCommandModel(
@@ -20,7 +27,7 @@ function resolveEmbedCommandModel(
   if (explicitModel) return explicitModel;
 
   const roleModel = resolveModelRoleUri(config, 'embed');
-  if (isLegacyEmbeddingModel(roleModel)) return roleModel;
+  if (isSupportedEmbeddingModel(roleModel)) return roleModel;
 
   const legacyModel = config?.embeddings?.model || DEFAULT_MODEL;
   warn(

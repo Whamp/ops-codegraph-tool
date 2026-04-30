@@ -4,8 +4,23 @@
  * Re-exports everything consumers previously imported from `../embedder.js`.
  */
 
+export {
+  formatEmbeddingDocument,
+  formatEmbeddingQuery,
+  getEmbeddingCompatibilityProfile,
+} from './compatibility.js';
+export { createEmbeddingPort, embedTexts } from './embedding-factory.js';
 export type { BuildEmbeddingsOptions } from './generator.js';
 export { buildEmbeddings, estimateTokens } from './generator.js';
+export { HttpEmbeddingPort, isHttpModelUri } from './http-embedding.js';
+export type { DownloadPolicy, ParsedModelUri } from './model-cache.js';
+export {
+  isGgufModelUri,
+  ModelCache,
+  parseModelUri,
+  resolveDownloadPolicy,
+  validateGgufFile,
+} from './model-cache.js';
 export type {
   ModelConfig,
   ModelRole,
@@ -20,6 +35,7 @@ export {
   disposeModel,
   EMBEDDING_STRATEGIES,
   embed,
+  getEmbeddingBatchSize,
   MODELS,
   RETRIEVAL_MODEL_PRESETS,
   resolveModelKey,

@@ -38,7 +38,7 @@ describe('embed command model compatibility', () => {
     buildEmbeddingsMock.mockClear();
   });
 
-  test('falls back to legacy embedding model for implicit unsupported preset embed URI', async () => {
+  test('routes implicit supported Qwen GGUF preset embed URI through buildEmbeddings', async () => {
     const config = ctx({ models: { preset: 'gno-compact' } });
 
     expect(resolveModelRoleUri(config.config, 'embed')).toBe(
@@ -49,11 +49,10 @@ describe('embed command model compatibility', () => {
 
     expect(buildEmbeddingsMock).toHaveBeenCalledWith(
       expect.any(String),
-      DEFAULTS.embeddings.model,
+      RETRIEVAL_MODEL_PRESETS['gno-compact']!.roles.embed,
       undefined,
       { strategy: 'structured' },
     );
-    expect(buildEmbeddingsMock.mock.calls[0]?.[1]).not.toMatch(/^hf:/);
   });
 
   test('uses implicit supported role model names without falling back', async () => {
@@ -67,16 +66,19 @@ describe('embed command model compatibility', () => {
     );
   });
 
-  test('preserves explicit unsupported --model so buildEmbeddings reports the existing error', async () => {
+  test('preserves explicit Qwen --model for the port factory', async () => {
     await command.execute?.(
       ['.'],
-      { strategy: 'structured', model: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF' },
+      {
+        strategy: 'structured',
+        model: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+      },
       ctx({ models: { preset: 'gno-compact' } }),
     );
 
     expect(buildEmbeddingsMock).toHaveBeenCalledWith(
       expect.any(String),
-      'hf:Qwen/Qwen3-Embedding-0.6B-GGUF',
+      'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
       undefined,
       { strategy: 'structured' },
     );

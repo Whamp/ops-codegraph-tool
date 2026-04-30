@@ -2,7 +2,9 @@ import { loadConfig } from '../../../infrastructure/config.js';
 import { warn } from '../../../infrastructure/logger.js';
 import type { BetterSqlite3Database, CodegraphConfig } from '../../../types.js';
 import { normalizeSymbol } from '../../queries.js';
-import { embed } from '../models.js';
+import { createEmbeddingPort } from '../embedding-factory.js';
+import { getEmbeddingBatchSize, getEmbeddingModelConfig } from '../models.js';
+import { embedWithRecovery } from '../ports.js';
 import { cosineSim } from '../stores/sqlite-blob.js';
 import { prepareSearch } from './prepare.js';
 
@@ -45,10 +47,12 @@ export async function searchData(
   const { db, rows, modelKey, storedDim } = prepared;
 
   try {
-    const {
-      vectors: [queryVec],
-      dim,
-    } = await embed([query], modelKey ?? undefined);
+    const activeModel = modelKey ?? undefined;
+    const queryPort = await createEmbeddingPort(activeModel ?? getEmbeddingModelConfig().name, {
+      inputType: 'query',
+    });
+    const [queryVec] = await embedWithRecovery(queryPort, [query]);
+    const dim = queryVec?.length ?? getEmbeddingModelConfig(activeModel).dim;
 
     if (storedDim && dim !== storedDim) {
       console.log(
@@ -107,7 +111,14 @@ export async function multiSearchData(
   const { db, rows, modelKey, storedDim } = prepared;
 
   try {
-    const { vectors: queryVecs, dim } = await embed(queries, modelKey ?? undefined);
+    const activeModel = modelKey ?? undefined;
+    const queryPort = await createEmbeddingPort(activeModel ?? getEmbeddingModelConfig().name, {
+      inputType: 'query',
+    });
+    const queryVecs = await embedWithRecovery(queryPort, queries, {
+      batchSize: getEmbeddingBatchSize(activeModel),
+    });
+    const dim = queryVecs[0]?.length ?? getEmbeddingModelConfig(activeModel).dim;
 
     const SIMILARITY_WARN_THRESHOLD = searchCfg.similarityWarnThreshold ?? 0.85;
     for (let i = 0; i < queryVecs.length; i++) {

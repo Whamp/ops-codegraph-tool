@@ -99,39 +99,39 @@ export const RETRIEVAL_MODEL_PRESETS: Record<string, RetrievalModelPreset> = {
     desc: 'Compatibility default: current Codegraph embedding model plus GNO-inspired retrieval roles.',
     roles: {
       embed: MODELS[DEFAULT_MODEL]!.name,
-      rerank: 'hf:Qwen/Qwen3-Reranker-0.6B-GGUF',
-      expand: 'hf:Qwen/Qwen2.5-0.5B-Instruct-GGUF',
-      gen: 'hf:Qwen/Qwen2.5-1.5B-Instruct-GGUF',
+      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
+      expand: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
+      gen: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
     },
   },
   'gno-compact': {
     name: 'gno-compact',
     desc: 'Compact GNO-inspired local retrieval model roles.',
     roles: {
-      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF',
-      rerank: 'hf:Qwen/Qwen3-Reranker-0.6B-GGUF',
-      expand: 'hf:Qwen/Qwen2.5-0.5B-Instruct-GGUF',
-      gen: 'hf:Qwen/Qwen2.5-1.5B-Instruct-GGUF',
+      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
+      expand: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
+      gen: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
     },
   },
   'gno-balanced': {
     name: 'gno-balanced',
     desc: 'Balanced GNO-inspired retrieval model roles.',
     roles: {
-      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF',
-      rerank: 'hf:Qwen/Qwen3-Reranker-0.6B-GGUF',
-      expand: 'hf:Qwen/Qwen2.5-1.5B-Instruct-GGUF',
-      gen: 'hf:Qwen/Qwen2.5-3B-Instruct-GGUF',
+      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
+      expand: 'hf:bartowski/Qwen2.5-3B-Instruct-GGUF/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
+      gen: 'hf:bartowski/Qwen2.5-3B-Instruct-GGUF/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
     },
   },
   'gno-quality': {
     name: 'gno-quality',
     desc: 'Quality-oriented GNO-inspired retrieval model roles.',
     roles: {
-      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF',
-      rerank: 'hf:Qwen/Qwen3-Reranker-0.6B-GGUF',
-      expand: 'hf:Qwen/Qwen2.5-3B-Instruct-GGUF',
-      gen: 'hf:Qwen/Qwen2.5-7B-Instruct-GGUF',
+      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
+      expand: 'hf:unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
+      gen: 'hf:unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
     },
   },
 };
@@ -146,6 +146,11 @@ const BATCH_SIZE_MAP: Record<string, number> = {
   'bge-large': 4,
 };
 const DEFAULT_BATCH_SIZE = 32;
+
+export function getEmbeddingBatchSize(modelKeyOrUri?: string): number {
+  const batchModelKey = resolveModelKey(modelKeyOrUri);
+  return BATCH_SIZE_MAP[batchModelKey] ?? DEFAULT_BATCH_SIZE;
+}
 
 export function resolveModelKey(modelKeyOrUri?: string): string {
   const requested = modelKeyOrUri || DEFAULT_MODEL;
@@ -163,6 +168,19 @@ export function getModelConfig(modelKey?: string): ModelConfig {
     throw new ConfigError(`Unknown model: ${key}. Available: ${Object.keys(MODELS).join(', ')}`);
   }
   return config;
+}
+
+export function getEmbeddingModelConfig(modelKey?: string): ModelConfig {
+  const key = resolveModelKey(modelKey);
+  const config = MODELS[key];
+  if (config) return config;
+  return {
+    name: key,
+    dim: 0,
+    contextWindow: 8192,
+    desc: 'External embedding model',
+    quantized: false,
+  };
 }
 
 function resolveLegacyEmbeddingUri(config?: CodegraphConfig): string | undefined {
@@ -385,8 +403,7 @@ export async function embed(
   modelKey?: string,
 ): Promise<{ vectors: Float32Array[]; dim: number }> {
   const config = getModelConfig(modelKey);
-  const batchModelKey = resolveModelKey(modelKey);
-  const batchSize = BATCH_SIZE_MAP[batchModelKey] ?? DEFAULT_BATCH_SIZE;
+  const batchSize = getEmbeddingBatchSize(modelKey);
   const transformerPort = createTransformerEmbeddingPort(modelKey);
   let embeddedCount = 0;
   const progressPort: EmbeddingPort = {
