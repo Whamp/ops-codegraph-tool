@@ -57,4 +57,18 @@ describe('search command model option resolution', () => {
       expect.objectContaining({ model: 'minilm' }),
     );
   });
+
+  test('passes additive --expand flag through to search', async () => {
+    await command.execute?.(
+      ['needle'],
+      { limit: '15', minScore: '0.2', rrfK: '60', expand: true },
+      ctx(),
+    );
+
+    expect(searchMock).toHaveBeenCalledWith(
+      'needle',
+      undefined,
+      expect.objectContaining({ expand: true }),
+    );
+  });
 });

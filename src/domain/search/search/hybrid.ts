@@ -2,6 +2,7 @@ import { openReadonlyOrFail } from '../../../db/index.js';
 import { loadConfig } from '../../../infrastructure/config.js';
 import type { BetterSqlite3Database, CodegraphConfig } from '../../../types.js';
 import { hasFtsIndex } from '../stores/fts5.js';
+import { routeExpandedQueries } from './expansion.js';
 import { ftsSearchData } from './keyword.js';
 import type { SemanticSearchOpts } from './semantic.js';
 import { searchData } from './semantic.js';
@@ -73,32 +74,47 @@ async function collectRankedLists(
   const rankedLists: RankedItem[][] = [];
 
   for (const q of queries) {
-    const bm25Data = ftsSearchData(q, customDbPath, { ...opts, limit: topK });
-    if (bm25Data?.results) {
-      rankedLists.push(
-        bm25Data.results.map((r, idx) => ({
-          key: `${r.name}:${r.file}:${r.line}`,
-          rank: idx + 1,
-          source: 'bm25' as const,
-          ...r,
-        })),
-      );
+    const bm25Probe = ftsSearchData(q, customDbPath, { ...opts, limit: Math.min(topK, 5) });
+    const routed = await routeExpandedQueries(
+      q,
+      {
+        enabled: opts.expand ?? false,
+        provider: opts.expansionProvider,
+        timeoutMs: opts.expansionTimeoutMs,
+      },
+      bm25Probe?.results ?? [],
+    );
+
+    for (const bm25Query of routed.bm25Queries) {
+      const bm25Data = ftsSearchData(bm25Query, customDbPath, { ...opts, limit: topK });
+      if (bm25Data?.results) {
+        rankedLists.push(
+          bm25Data.results.map((r, idx) => ({
+            key: `${r.name}:${r.file}:${r.line}`,
+            rank: idx + 1,
+            source: 'bm25' as const,
+            ...r,
+          })),
+        );
+      }
     }
 
-    const semData = await searchData(q, customDbPath, {
-      ...opts,
-      limit: topK,
-      minScore: opts.minScore ?? 0.2,
-    });
-    if (semData?.results) {
-      rankedLists.push(
-        semData.results.map((r, idx) => ({
-          key: `${r.name}:${r.file}:${r.line}`,
-          rank: idx + 1,
-          source: 'semantic' as const,
-          ...r,
-        })),
-      );
+    for (const semanticQuery of routed.semanticQueries) {
+      const semData = await searchData(semanticQuery, customDbPath, {
+        ...opts,
+        limit: topK,
+        minScore: opts.minScore ?? 0.2,
+      });
+      if (semData?.results) {
+        rankedLists.push(
+          semData.results.map((r, idx) => ({
+            key: `${r.name}:${r.file}:${r.line}`,
+            rank: idx + 1,
+            source: 'semantic' as const,
+            ...r,
+          })),
+        );
+      }
     }
   }
 
