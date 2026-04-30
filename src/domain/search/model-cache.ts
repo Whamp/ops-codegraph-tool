@@ -181,13 +181,13 @@ export class ModelCache {
       runtime = (await importOptionalRuntime('node-llama-cpp')) as typeof runtime;
     } catch (cause) {
       throw new EngineError(
-        'Qwen/GGUF embeddings require optional runtime node-llama-cpp. Install it only if you use GGUF models: npm install node-llama-cpp',
+        'Qwen/GGUF embeddings require the bundled node-llama-cpp runtime. Reinstall Codegraph or inspect the package manager/native build error.',
         { cause: asError(cause) },
       );
     }
     if (!runtime.resolveModelFile) {
       throw new EngineError(
-        'node-llama-cpp does not expose resolveModelFile; update the optional runtime.',
+        'node-llama-cpp does not expose resolveModelFile; update the bundled runtime.',
       );
     }
     await mkdir(this.dir, { recursive: true });

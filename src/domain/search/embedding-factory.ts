@@ -100,7 +100,7 @@ class NodeLlamaCppEmbeddingPort implements EmbeddingPort {
       runtime = await this.runtimeLoader();
     } catch (cause) {
       throw new EngineError(
-        'Qwen/GGUF embeddings require optional runtime node-llama-cpp. Install it only if you use GGUF models: npm install node-llama-cpp',
+        'Qwen/GGUF embeddings require the bundled node-llama-cpp runtime. Reinstall Codegraph or inspect the package manager/native build error.',
         { cause: asError(cause) },
       );
     }
