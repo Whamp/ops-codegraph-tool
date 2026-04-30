@@ -193,8 +193,9 @@ export const sqliteVecDriver: VectorAccelerationDriver = {
     const insert = db.prepare(`INSERT INTO ${tableName} (node_id, embedding) VALUES (?, ?)`);
     const tx = db.transaction(() => {
       for (const row of rows) {
-        del.run(row.nodeId);
-        insert.run(row.nodeId, encodeEmbedding(row.embedding));
+        const nodeId = BigInt(row.nodeId);
+        del.run(nodeId);
+        insert.run(nodeId, encodeEmbedding(row.embedding));
       }
     });
     tx();
@@ -202,7 +203,7 @@ export const sqliteVecDriver: VectorAccelerationDriver = {
   delete(db, tableName, nodeIds) {
     const del = db.prepare(`DELETE FROM ${tableName} WHERE node_id = ?`);
     const tx = db.transaction(() => {
-      for (const nodeId of nodeIds) del.run(nodeId);
+      for (const nodeId of nodeIds) del.run(BigInt(nodeId));
     });
     tx();
   },
@@ -409,6 +410,7 @@ export function createVectorIndex(
     },
     rebuildVecIndex() {
       if (!searchAvailable) return ok(undefined);
+      this.vecDirty = true;
       try {
         driver.rebuild(db, tableName, storageRows());
         this.vecDirty = false;
@@ -423,6 +425,7 @@ export function createVectorIndex(
     },
     syncVecIndex() {
       if (!searchAvailable) return ok({ added: 0, removed: 0 });
+      this.vecDirty = true;
       try {
         const result = driver.sync(db, tableName, storageRows());
         this.vecDirty = false;

@@ -5,6 +5,7 @@ import {
   createVectorIndex,
   decodeEmbedding,
   encodeEmbedding,
+  sqliteVecDriver,
   type VectorAccelerationDriver,
   vectorStorageKey,
 } from '../../src/domain/search/vector-index.js';
@@ -233,6 +234,54 @@ describe('vector index acceleration', () => {
     const result = fresh.searchNearest(new Float32Array([1, 0, 0]), 1);
     expect(result.ok).toBe(false);
     expect(result.ok ? undefined : result.error.code).toBe('VECTOR_INDEX_DIRTY');
+  });
+
+  test('sqlite-vec driver binds vector table primary keys as bigint', () => {
+    const calls: Array<{ sql: string; args: unknown[] }> = [];
+    const database = {
+      prepare: vi.fn((sql: string) => ({
+        run: vi.fn((...args: unknown[]) => calls.push({ sql, args })),
+      })),
+      transaction: vi.fn((fn: () => void) => fn),
+    };
+
+    sqliteVecDriver.upsert(database as unknown as Database.Database, 'vec_test', [
+      {
+        nodeId: 42,
+        model: meta.modelUri,
+        metadataKey: vectorStorageKey(meta),
+        embedding: new Float32Array([1, 0, 0]),
+      },
+    ]);
+
+    expect(calls).toEqual([
+      { sql: 'DELETE FROM vec_test WHERE node_id = ?', args: [42n] },
+      {
+        sql: 'INSERT INTO vec_test (node_id, embedding) VALUES (?, ?)',
+        args: [42n, expect.any(Buffer)],
+      },
+    ]);
+  });
+
+  test('marks dirty before direct rebuild and sync mutate the accelerated index', () => {
+    const database = db();
+    let index: ReturnType<typeof createVectorIndex>;
+    const driver = fakeDriver({
+      rebuild: vi.fn(() => {
+        expect(index.vecDirty).toBe(true);
+      }),
+      sync: vi.fn(() => {
+        expect(index.vecDirty).toBe(true);
+        return { added: 0, removed: 0 };
+      }),
+    });
+    index = createVectorIndex(database, meta, { driver });
+
+    expect(index.vecDirty).toBe(false);
+    expect(index.rebuildVecIndex().ok).toBe(true);
+    expect(index.vecDirty).toBe(false);
+    expect(index.syncVecIndex().ok).toBe(true);
+    expect(index.vecDirty).toBe(false);
   });
 
   test('rebuild removes stale accelerated rows left from a previous full embed', () => {
