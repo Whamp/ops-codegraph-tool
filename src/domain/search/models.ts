@@ -165,6 +165,19 @@ export function getModelConfig(modelKey?: string): ModelConfig {
   return config;
 }
 
+export function getEmbeddingModelConfig(modelKey?: string): ModelConfig {
+  const key = resolveModelKey(modelKey);
+  const config = MODELS[key];
+  if (config) return config;
+  return {
+    name: key,
+    dim: 0,
+    contextWindow: 8192,
+    desc: 'External embedding model',
+    quantized: false,
+  };
+}
+
 function resolveLegacyEmbeddingUri(config?: CodegraphConfig): string | undefined {
   const legacyModel = config?.embeddings?.model;
   if (!legacyModel) return undefined;

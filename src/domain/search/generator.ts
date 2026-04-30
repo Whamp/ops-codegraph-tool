@@ -4,7 +4,9 @@ import { closeDb, findDbPath, getBuildMeta, openDb } from '../../db/index.js';
 import { warn } from '../../infrastructure/logger.js';
 import { DbError } from '../../shared/errors.js';
 import type { BetterSqlite3Database, NodeRow } from '../../types.js';
-import { embed, getModelConfig } from './models.js';
+import { formatEmbeddingDocument } from './compatibility.js';
+import { createEmbeddingPort } from './embedding-factory.js';
+import { getEmbeddingModelConfig } from './models.js';
 import { type EmbeddingPort, embedWithRecovery } from './ports.js';
 import { buildSourceText } from './strategies/source.js';
 import { buildStructuredText } from './strategies/structured.js';
@@ -112,7 +114,7 @@ export async function buildEmbeddings(
   const nodeIds: number[] = [];
   const nodeNames: string[] = [];
   const previews: string[] = [];
-  const config = getModelConfig(modelKey);
+  const config = getEmbeddingModelConfig(modelKey);
   const contextWindow = config.contextWindow;
   let overflowCount = 0;
   let filesRead = 0;
@@ -144,7 +146,7 @@ export async function buildEmbeddings(
         text = text.slice(0, maxChars);
       }
 
-      texts.push(text);
+      texts.push(formatEmbeddingDocument(text, modelKey));
       nodeIds.push(node.id);
       nodeNames.push(node.name);
       previews.push(`${node.name} (${node.kind}) -- ${file}:${node.line}`);
@@ -171,12 +173,17 @@ export async function buildEmbeddings(
   }
 
   console.log(`Embedding ${texts.length} symbols...`);
+  const embeddingPort =
+    options.embeddingPort ?? (await createEmbeddingPort(modelKey, { inputType: 'raw' }));
   const embedded = options.embeddingPort
     ? {
-        vectors: await embedWithRecovery(options.embeddingPort, texts),
+        vectors: await embedWithRecovery(embeddingPort, texts),
         dim: texts.length > 0 ? undefined : config.dim,
       }
-    : await embed(texts, modelKey);
+    : {
+        vectors: await embedWithRecovery(embeddingPort, texts),
+        dim: texts.length > 0 ? undefined : config.dim,
+      };
   const vectors = embedded.vectors;
   const dim = embedded.dim ?? vectors[0]?.length ?? config.dim;
 
