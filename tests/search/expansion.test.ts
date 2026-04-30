@@ -24,7 +24,7 @@ describe('query expansion parsing and guardrails', () => {
   test('preserves technical anchors and filters drifted variants', () => {
     const guarded = applyExpansionGuardrails('find C++ "JWT token" -legacy AuthService', {
       lexicalQueries: ['unrelated database migration', 'AuthService validates JWT token'],
-      vectorQueries: ['payments reconciliation', 'AuthService validates JWT token in C++'],
+      vectorQueries: ['payments reconciliation', 'AuthService validates JWT token in C++ -legacy'],
       hyde: 'This passage is about cooking dinner.',
     });
 
@@ -33,7 +33,49 @@ describe('query expansion parsing and guardrails', () => {
     expect(guarded.lexicalQueries[0]).toContain('-legacy');
     expect(guarded.lexicalQueries[0]).toContain('AuthService');
     expect(guarded.lexicalQueries).not.toContain('unrelated database migration');
-    expect(guarded.vectorQueries).toEqual(['AuthService validates JWT token in C++']);
+    expect(guarded.vectorQueries).toEqual(['AuthService validates JWT token in C++ -legacy']);
+    expect(guarded.hyde).toBeUndefined();
+  });
+
+  test('rejects negation drift and does not let positive negated tokens satisfy anchors', () => {
+    const guarded = applyExpansionGuardrails('AuthService -legacy', {
+      lexicalQueries: ['legacy auth migration', 'AuthService migration'],
+      vectorQueries: ['legacy auth migration', 'AuthService migration -legacy'],
+      hyde: 'AuthService migration recommends legacy compatibility.',
+    });
+
+    expect(guarded.lexicalQueries).toContain('AuthService -legacy');
+    expect(guarded.lexicalQueries).not.toContain('legacy auth migration');
+    expect(guarded.lexicalQueries).not.toContain('AuthService migration');
+    expect(guarded.vectorQueries).toEqual(['AuthService migration -legacy']);
+    expect(guarded.hyde).toBeUndefined();
+  });
+
+  test('requires quoted phrases rather than accepting partial phrase overlap', () => {
+    const guarded = applyExpansionGuardrails('debug "JWT token" parser', {
+      lexicalQueries: ['JWT parser', 'token parser'],
+      vectorQueries: ['JWT parser internals', 'debug JWT token parser'],
+      hyde: 'The parser handles JWT values but omits token phrase context.',
+    });
+
+    expect(guarded.lexicalQueries).toEqual(['"JWT token"']);
+    expect(guarded.vectorQueries).toEqual(['debug JWT token parser']);
+    expect(guarded.hyde).toBeUndefined();
+  });
+
+  test('preserves acronyms code symbols and critical entities exactly', () => {
+    const guarded = applyExpansionGuardrails('React.useEffect C++ JWT AuthService', {
+      lexicalQueries: ['react hooks authservice jwt', 'React.useEffect JWT'],
+      vectorQueries: [
+        'react hooks authservice jwt',
+        'React.useEffect C++ JWT AuthService lifecycle',
+      ],
+      hyde: 'React hooks discuss authservice jwt behavior without the exact code symbols.',
+    });
+
+    expect(guarded.lexicalQueries).toContain('React.useEffect C++ JWT AuthService');
+    expect(guarded.lexicalQueries).not.toContain('react hooks authservice jwt');
+    expect(guarded.vectorQueries).toEqual(['React.useEffect C++ JWT AuthService lifecycle']);
     expect(guarded.hyde).toBeUndefined();
   });
 
@@ -62,7 +104,7 @@ describe('query expansion parsing and guardrails', () => {
 });
 
 describe('query expansion routing', () => {
-  test('skips expansion for strong BM25 score and gap', async () => {
+  test('skips expansion for exact-name BM25 hits even with tiny FTS5 scores', async () => {
     expect(
       hasStrongBm25Signal([
         { name: 'authenticate', bm25Score: 0.95 },
@@ -80,14 +122,34 @@ describe('query expansion routing', () => {
         },
       },
       [
-        { name: 'authenticate', bm25Score: 0.95 },
-        { name: 'authMiddleware', bm25Score: 0.7 },
+        { name: 'authenticate', bm25Score: 0.000012 },
+        { name: 'authMiddleware', bm25Score: 0.000004 },
       ],
     );
 
     expect(routed.skipped).toBe('strong_bm25');
     expect(routed.bm25Queries).toEqual(['authenticate']);
     expect(routed.semanticQueries).toEqual(['authenticate']);
+  });
+
+  test('does not skip expansion for high non-exact BM25 scores alone', async () => {
+    const routed = await routeExpandedQueries(
+      'auth migration',
+      {
+        enabled: true,
+        provider: {
+          generate: async () =>
+            '{"lexicalQueries":["auth login"],"vectorQueries":["auth token validation"],"hyde":"auth migration token validation"}',
+        },
+      },
+      [
+        { name: 'authenticate', bm25Score: 0.95 },
+        { name: 'authMiddleware', bm25Score: 0.7 },
+      ],
+    );
+
+    expect(routed.skipped).toBeNull();
+    expect(routed.bm25Queries).toContain('auth login');
   });
 
   test('routes lexical variants only to BM25 and vector/HyDE variants only to semantic', async () => {

@@ -99,6 +99,10 @@ function extractOverlapTokens(text: string): Set<string> {
   );
 }
 
+function stripAnchorSpans(query: string): string {
+  return query.replace(QUOTED_PHRASE_PATTERN, ' ').replace(NEGATION_PATTERN, ' ');
+}
+
 function extractQuerySignals(query: string): QuerySignals {
   const quotedPhrases = dedupeStrings(
     [...query.matchAll(QUOTED_PHRASE_PATTERN)].map((match) => match[1]?.trim() ?? ''),
@@ -112,7 +116,7 @@ function extractQuerySignals(query: string): QuerySignals {
     }),
   );
   const criticalEntities = dedupeStrings(
-    (query.match(TOKEN_PATTERN) ?? []).filter(
+    (stripAnchorSpans(query).match(TOKEN_PATTERN) ?? []).filter(
       (token) => /[A-Z]/.test(token) || /[+#.]/.test(token) || /[A-Za-z]\d|\d[A-Za-z]/.test(token),
     ),
   );
@@ -123,14 +127,51 @@ function hasCaseInsensitiveSubstring(text: string, part: string): boolean {
   return text.toLowerCase().includes(part.toLowerCase());
 }
 
-function hasSufficientOverlap(signals: QuerySignals, candidate: string): boolean {
-  if (!candidate.trim()) return false;
-  for (const phrase of signals.quotedPhrases)
-    if (hasCaseInsensitiveSubstring(candidate, phrase)) return true;
+function parseNegationValue(negation: string): string {
+  if (negation.startsWith('-"') && negation.endsWith('"')) return negation.slice(2, -1);
+  return negation.slice(1);
+}
+
+function hasNegationAnchor(candidate: string, negation: string): boolean {
+  return candidate.includes(negation);
+}
+
+function hasPositiveNegatedValue(candidate: string, negation: string): boolean {
+  const value = parseNegationValue(negation);
+  if (!value) return false;
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^A-Za-z0-9_#.+-])${escaped}($|[^A-Za-z0-9_#.+-])`, 'i').test(candidate);
+}
+
+function contradictsNegation(signals: QuerySignals, candidate: string): boolean {
+  return signals.negations.some(
+    (negation) =>
+      !hasNegationAnchor(candidate, negation) && hasPositiveNegatedValue(candidate, negation),
+  );
+}
+
+function hasRequiredAnchors(
+  signals: QuerySignals,
+  candidate: string,
+  exactLexical: boolean,
+): boolean {
+  if (!candidate.trim() || contradictsNegation(signals, candidate)) return false;
+  for (const phrase of signals.quotedPhrases) {
+    if (exactLexical) {
+      if (!candidate.includes(`"${phrase}"`)) return false;
+    } else if (!hasCaseInsensitiveSubstring(candidate, phrase)) return false;
+  }
   for (const negation of signals.negations)
-    if (hasCaseInsensitiveSubstring(candidate, negation)) return true;
-  for (const entity of signals.criticalEntities)
-    if (hasCaseInsensitiveSubstring(candidate, entity)) return true;
+    if (!hasNegationAnchor(candidate, negation)) return false;
+  for (const entity of signals.criticalEntities) if (!candidate.includes(entity)) return false;
+  return true;
+}
+
+function hasSufficientOverlap(signals: QuerySignals, candidate: string): boolean {
+  if (!candidate.trim() || contradictsNegation(signals, candidate)) return false;
+  if ([...signals.quotedPhrases, ...signals.negations, ...signals.criticalEntities].length > 0) {
+    return hasRequiredAnchors(signals, candidate, false);
+  }
   for (const token of extractOverlapTokens(candidate))
     if (signals.overlapTokens.has(token)) return true;
   return false;
@@ -154,7 +195,11 @@ export function applyExpansionGuardrails(
     buildAnchorLexicalQuery(query, signals),
     ...expansion.lexicalQueries,
   ])
-    .filter((variant) => hasSufficientOverlap(signals, variant))
+    .filter((variant) =>
+      [...signals.quotedPhrases, ...signals.negations, ...signals.criticalEntities].length > 0
+        ? hasRequiredAnchors(signals, variant, true)
+        : hasSufficientOverlap(signals, variant),
+    )
     .slice(0, MAX_VARIANTS);
   const vector = dedupeStrings(expansion.vectorQueries)
     .filter((variant) => hasSufficientOverlap(signals, variant))
@@ -252,7 +297,7 @@ export function hasStrongExactBm25Signal(query: string, results: Bm25SignalResul
   const normalizedQuery = normalizeExactQuery(query);
   const exactName = top.name?.toLowerCase() === normalizedQuery;
   const gap = top.bm25Score - (second?.bm25Score ?? 0);
-  return hasStrongBm25Signal(results) || Boolean(exactName && top.bm25Score > 0 && gap > 0);
+  return Boolean(exactName && top.bm25Score > 0 && gap > 0);
 }
 
 export async function routeExpandedQueries(
