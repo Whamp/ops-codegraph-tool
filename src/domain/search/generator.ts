@@ -4,9 +4,19 @@ import { closeDb, findDbPath, getBuildMeta, openDb } from '../../db/index.js';
 import { warn } from '../../infrastructure/logger.js';
 import { DbError } from '../../shared/errors.js';
 import type { BetterSqlite3Database, NodeRow } from '../../types.js';
-import { embed, getModelConfig } from './models.js';
+import { formatEmbeddingDocument } from './compatibility.js';
+import { createEmbeddingPort } from './embedding-factory.js';
+import {
+  createEmbeddingMetadataEntries,
+  expectedEmbeddingMetadata,
+  readEmbeddingMetadata,
+  warnIfEmbeddingMetadataStale,
+} from './metadata.js';
+import { getEmbeddingBatchSize, getEmbeddingModelConfig } from './models.js';
+import { type EmbeddingPort, embedWithRecovery } from './ports.js';
 import { buildSourceText } from './strategies/source.js';
 import { buildStructuredText } from './strategies/structured.js';
+import { createVectorIndex, vectorStorageKey } from './vector-index.js';
 
 /**
  * Rough token estimate (~4 chars per token for code/English).
@@ -49,6 +59,7 @@ function initEmbeddingsSchema(db: BetterSqlite3Database): void {
 
 export interface BuildEmbeddingsOptions {
   strategy?: 'structured' | 'source';
+  embeddingPort?: EmbeddingPort;
 }
 
 /**
@@ -72,6 +83,17 @@ export async function buildEmbeddings(
 
   const db = openDb(dbPath) as BetterSqlite3Database;
   initEmbeddingsSchema(db);
+
+  const config = getEmbeddingModelConfig(modelKey);
+  warnIfEmbeddingMetadataStale(
+    readEmbeddingMetadata(db),
+    expectedEmbeddingMetadata({
+      modelUri: config.name,
+      dimension: config.dim || undefined,
+      strategy,
+    }),
+    { modelHint: modelKey, command: 'embed' },
+  );
 
   // Prefer the repo root recorded at build time — embed may be invoked from a
   // different cwd (e.g. `codegraph embed --db /abs/path/graph.db`) and the
@@ -110,7 +132,6 @@ export async function buildEmbeddings(
   const nodeIds: number[] = [];
   const nodeNames: string[] = [];
   const previews: string[] = [];
-  const config = getModelConfig(modelKey);
   const contextWindow = config.contextWindow;
   let overflowCount = 0;
   let filesRead = 0;
@@ -142,7 +163,7 @@ export async function buildEmbeddings(
         text = text.slice(0, maxChars);
       }
 
-      texts.push(text);
+      texts.push(formatEmbeddingDocument(text, modelKey));
       nodeIds.push(node.id);
       nodeNames.push(node.name);
       previews.push(`${node.name} (${node.kind}) -- ${file}:${node.line}`);
@@ -169,7 +190,25 @@ export async function buildEmbeddings(
   }
 
   console.log(`Embedding ${texts.length} symbols...`);
-  const { vectors, dim } = await embed(texts, modelKey);
+  const embeddingPort =
+    options.embeddingPort ?? (await createEmbeddingPort(modelKey, { inputType: 'raw' }));
+  const batchSize = getEmbeddingBatchSize(modelKey);
+  const embedded = {
+    vectors: await embedWithRecovery(embeddingPort, texts, { batchSize }),
+    dim: texts.length > 0 ? undefined : config.dim,
+  };
+  const vectors = embedded.vectors;
+  const dim = embedded.dim ?? vectors[0]?.length ?? config.dim;
+
+  const activeMetadata = expectedEmbeddingMetadata({
+    modelUri: config.name,
+    dimension: dim,
+    strategy,
+  });
+  const vectorIndex = createVectorIndex(db, activeMetadata);
+  const metadataKey = vectorStorageKey(activeMetadata);
+  vectorIndex.vecDirty = true;
+  db.prepare('DELETE FROM embedding_vectors WHERE metadata_key = ?').run(metadataKey);
 
   const insert = db.prepare(
     'INSERT OR REPLACE INTO embeddings (node_id, vector, text_preview, full_text) VALUES (?, ?, ?, ?)',
@@ -179,20 +218,43 @@ export async function buildEmbeddings(
   const insertAll = db.transaction(() => {
     for (let i = 0; i < vectors.length; i++) {
       const vec = vectors[i] as Float32Array;
-      insert.run(nodeIds[i], Buffer.from(vec.buffer), previews[i], texts[i]);
+      insert.run(
+        nodeIds[i],
+        Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength),
+        previews[i],
+        texts[i],
+      );
       insertFts.run(nodeIds[i], nodeNames[i], texts[i]);
     }
-    insertMeta.run('model', config.name);
-    insertMeta.run('dim', String(dim));
+    for (const { key, value } of createEmbeddingMetadataEntries({
+      modelUri: config.name,
+      dimension: dim,
+      strategy,
+    })) {
+      insertMeta.run(key, value);
+    }
     insertMeta.run('count', String(vectors.length));
     insertMeta.run('fts_count', String(vectors.length));
-    insertMeta.run('strategy', strategy);
-    insertMeta.run('built_at', new Date().toISOString());
     if (overflowCount > 0) {
       insertMeta.run('truncated_count', String(overflowCount));
     }
   });
   insertAll();
+
+  const vectorWrite = vectorIndex.upsertVectors(
+    vectors.map((vec, i) => ({
+      nodeId: nodeIds[i]!,
+      model: config.name,
+      metadataKey,
+      embedding: vec,
+    })),
+  );
+  if (!vectorWrite.ok) {
+    warn(vectorWrite.error.message);
+  } else {
+    const rebuild = vectorIndex.rebuildVecIndex();
+    if (!rebuild.ok) warn(rebuild.error.message);
+  }
 
   console.log(
     `\nStored ${vectors.length} embeddings (${dim}d, ${config.name}, strategy: ${strategy}) in graph.db`,

@@ -2,9 +2,14 @@ import { loadConfig } from '../../../infrastructure/config.js';
 import { warn } from '../../../infrastructure/logger.js';
 import type { BetterSqlite3Database, CodegraphConfig } from '../../../types.js';
 import { normalizeSymbol } from '../../queries.js';
-import { embed } from '../models.js';
+import { createEmbeddingPort } from '../embedding-factory.js';
+import { expectedEmbeddingMetadata, warnIfEmbeddingMetadataStale } from '../metadata.js';
+import { getEmbeddingBatchSize, getEmbeddingModelConfig } from '../models.js';
+import { embedWithRecovery } from '../ports.js';
 import { cosineSim } from '../stores/sqlite-blob.js';
-import { prepareSearch } from './prepare.js';
+import { createVectorIndex } from '../vector-index.js';
+import type { ExpansionProvider, QueryModeInput, QueryTextKind } from './expansion.js';
+import { type PreparedSearch, prepareSearch } from './prepare.js';
 
 export interface SemanticSearchOpts {
   config?: CodegraphConfig;
@@ -15,6 +20,18 @@ export interface SemanticSearchOpts {
   filePattern?: string | string[];
   noTests?: boolean;
   rrfK?: number;
+  expand?: boolean;
+  expansionProvider?: ExpansionProvider;
+  expansionTimeoutMs?: number;
+  queryModes?: QueryModeInput[];
+  queryTextKind?: QueryTextKind;
+  explain?: boolean;
+  /** Enable/disable hybrid reranking for this request. Undefined uses config. */
+  rerank?: boolean;
+  /** Override the number of fused candidates eligible for reranking. */
+  rerankCandidates?: number;
+  /** Optional injected rerank port for tests/custom cross-encoder reranking. */
+  rerankPort?: import('./rerank.js').RerankPort;
 }
 
 interface SemanticResult {
@@ -24,6 +41,66 @@ interface SemanticResult {
   line: number;
   similarity: number;
   [key: string]: unknown;
+}
+
+function bruteForceSemanticResults(
+  prepared: PreparedSearch,
+  queryVec: Float32Array,
+  minScore: number,
+): SemanticResult[] {
+  const { db, rows } = prepared;
+  const hc = new Map<string, string>();
+  const results: SemanticResult[] = [];
+  for (const row of rows) {
+    const vec = new Float32Array(new Uint8Array(row.vector as unknown as ArrayBuffer).buffer);
+    const sim = cosineSim(queryVec, vec);
+
+    if (sim >= minScore) {
+      results.push({
+        ...normalizeSymbol(row, db as BetterSqlite3Database, hc),
+        similarity: sim,
+        text_preview: row.text_preview,
+        full_text: row.full_text,
+      });
+    }
+  }
+
+  results.sort((a, b) => b.similarity - a.similarity);
+  return results;
+}
+
+function hasSemanticFilters(opts: SemanticSearchOpts): boolean {
+  return Boolean(opts.kind || opts.filePattern || opts.noTests);
+}
+
+function tryAcceleratedSemanticResults(
+  prepared: PreparedSearch,
+  queryVec: Float32Array,
+  activeMetadata: ReturnType<typeof expectedEmbeddingMetadata>,
+  limit: number,
+  minScore: number,
+  filtersActive: boolean,
+): SemanticResult[] | null {
+  if (filtersActive) return null;
+  const { db, rows } = prepared;
+  const vectorIndex = createVectorIndex(db, activeMetadata, { mode: 'search' });
+  const accelerated = vectorIndex.searchNearest(queryVec, limit, { minScore });
+  if (!accelerated.ok) return null;
+
+  const byNodeId = new Map(rows.map((row) => [row.node_id, row]));
+  const hc = new Map<string, string>();
+  const results: SemanticResult[] = [];
+  for (const hit of accelerated.value) {
+    const row = byNodeId.get(hit.nodeId);
+    if (!row) continue;
+    results.push({
+      ...normalizeSymbol(row, db as BetterSqlite3Database, hc),
+      similarity: hit.similarity,
+      text_preview: row.text_preview,
+      full_text: row.full_text,
+    });
+  }
+  return results;
 }
 
 export interface SearchDataResult {
@@ -42,13 +119,29 @@ export async function searchData(
 
   const prepared = prepareSearch(customDbPath, opts);
   if (!prepared) return null;
-  const { db, rows, modelKey, storedDim } = prepared;
+  const { db, rows, modelKey, storedDim, storedMetadata } = prepared;
 
   try {
-    const {
-      vectors: [queryVec],
-      dim,
-    } = await embed([query], modelKey ?? undefined);
+    const activeModel = modelKey ?? undefined;
+    const activeConfig = getEmbeddingModelConfig(activeModel);
+    warnIfEmbeddingMetadataStale(
+      storedMetadata,
+      expectedEmbeddingMetadata({
+        modelUri: activeConfig.name,
+        dimension: activeConfig.dim || undefined,
+      }),
+      { modelHint: activeModel ?? activeConfig.name, command: 'search' },
+    );
+    const expectedMetadata = expectedEmbeddingMetadata({
+      modelUri: activeConfig.name,
+      dimension: activeConfig.dim || undefined,
+      strategy: storedMetadata.strategy,
+    });
+    const queryPort = await createEmbeddingPort(activeModel ?? getEmbeddingModelConfig().name, {
+      inputType: 'query',
+    });
+    const [queryVec] = await embedWithRecovery(queryPort, [query]);
+    const dim = queryVec?.length ?? getEmbeddingModelConfig(activeModel).dim;
 
     if (storedDim && dim !== storedDim) {
       console.log(
@@ -58,21 +151,24 @@ export async function searchData(
       return null;
     }
 
-    const hc = new Map<string, string>();
-    const results: SemanticResult[] = [];
-    for (const row of rows) {
-      const vec = new Float32Array(new Uint8Array(row.vector as unknown as ArrayBuffer).buffer);
-      const sim = cosineSim(queryVec!, vec);
-
-      if (sim >= minScore) {
-        results.push({
-          ...normalizeSymbol(row, db as BetterSqlite3Database, hc),
-          similarity: sim,
-        });
-      }
-    }
-
-    results.sort((a, b) => b.similarity - a.similarity);
+    const activeMetadata = { ...expectedMetadata, dimension: dim };
+    const accelerated = queryVec
+      ? tryAcceleratedSemanticResults(
+          { db, rows, modelKey, storedDim, storedMetadata },
+          queryVec,
+          activeMetadata,
+          limit,
+          minScore,
+          hasSemanticFilters(opts),
+        )
+      : null;
+    const results =
+      accelerated ??
+      bruteForceSemanticResults(
+        { db, rows, modelKey, storedDim, storedMetadata },
+        queryVec!,
+        minScore,
+      );
     return { results: results.slice(0, limit) };
   } finally {
     db.close();
@@ -104,10 +200,26 @@ export async function multiSearchData(
 
   const prepared = prepareSearch(customDbPath, opts);
   if (!prepared) return null;
-  const { db, rows, modelKey, storedDim } = prepared;
+  const { db, rows, modelKey, storedDim, storedMetadata } = prepared;
 
   try {
-    const { vectors: queryVecs, dim } = await embed(queries, modelKey ?? undefined);
+    const activeModel = modelKey ?? undefined;
+    const activeConfig = getEmbeddingModelConfig(activeModel);
+    warnIfEmbeddingMetadataStale(
+      storedMetadata,
+      expectedEmbeddingMetadata({
+        modelUri: activeConfig.name,
+        dimension: activeConfig.dim || undefined,
+      }),
+      { modelHint: activeModel ?? activeConfig.name, command: 'search' },
+    );
+    const queryPort = await createEmbeddingPort(activeModel ?? getEmbeddingModelConfig().name, {
+      inputType: 'query',
+    });
+    const queryVecs = await embedWithRecovery(queryPort, queries, {
+      batchSize: getEmbeddingBatchSize(activeModel),
+    });
+    const dim = queryVecs[0]?.length ?? getEmbeddingModelConfig(activeModel).dim;
 
     const SIMILARITY_WARN_THRESHOLD = searchCfg.similarityWarnThreshold ?? 0.85;
     for (let i = 0; i < queryVecs.length; i++) {

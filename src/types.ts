@@ -113,6 +113,8 @@ export type LanguageId =
 /** Engine mode selector. */
 export type EngineMode = 'native' | 'wasm' | 'auto';
 
+export type ModelRole = 'embed' | 'rerank' | 'expand' | 'gen';
+
 /** Graph export formats. */
 export type ExportFormat = 'dot' | 'mermaid' | 'json' | 'graphml' | 'graphson' | 'neo4j-csv';
 
@@ -1117,6 +1119,11 @@ export interface CodegraphConfig {
     llmProvider: string | null;
   };
 
+  models?: {
+    preset?: string;
+    roles?: Partial<Record<ModelRole, string>>;
+  };
+
   llm: {
     provider: string | null;
     model: string | null;
@@ -1137,6 +1144,22 @@ export interface CodegraphConfig {
     rrfK: number;
     topK: number;
     similarityWarnThreshold: number;
+    rrfWeights?: {
+      bm25?: number;
+      bm25Variant?: number;
+      vector?: number;
+      vectorVariant?: number;
+      hyde?: number;
+    };
+    topRankBonus?: number;
+    topRankThreshold?: number;
+    nearTopRankBonusMultiplier?: number;
+    rerank?: {
+      enabled?: boolean;
+      maxCandidates?: number;
+      fusionWeight?: number;
+      rerankWeight?: number;
+    };
   };
 
   ci: {

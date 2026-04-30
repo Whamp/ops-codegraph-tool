@@ -2,6 +2,11 @@ import { execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { info } from '../../infrastructure/logger.js';
 import { ConfigError, EngineError } from '../../shared/errors.js';
+import type { CodegraphConfig } from '../../types.js';
+import { type EmbeddingPort, embedWithRecovery } from './ports.js';
+
+export type ModelRole = 'embed' | 'rerank' | 'expand' | 'gen';
+export type ModelRoleMap = Record<ModelRole, string>;
 
 export interface ModelConfig {
   name: string;
@@ -73,7 +78,68 @@ export const MODELS: Record<string, ModelConfig> = {
 
 export const EMBEDDING_STRATEGIES: readonly string[] = ['structured', 'source'];
 
-export const DEFAULT_MODEL: string = 'nomic-v1.5';
+export const GNO_COMPACT_EMBEDDING_MODEL =
+  'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf';
+export const DEFAULT_EMBEDDING_MODEL = GNO_COMPACT_EMBEDDING_MODEL;
+export const LEGACY_TRANSFORMER_DEFAULT_MODEL = 'nomic-v1.5';
+export const DEFAULT_MODEL: string = DEFAULT_EMBEDDING_MODEL;
+export const DEFAULT_RETRIEVAL_PRESET = 'gno-compact';
+export const LEGACY_RETRIEVAL_PRESET = 'codegraph-default';
+
+export interface RetrievalModelPreset {
+  name: string;
+  desc: string;
+  roles: ModelRoleMap;
+}
+
+export interface ResolvedRetrievalModels {
+  preset: string;
+  requestedPreset?: string;
+  roles: ModelRoleMap;
+}
+
+export const RETRIEVAL_MODEL_PRESETS: Record<string, RetrievalModelPreset> = {
+  [LEGACY_RETRIEVAL_PRESET]: {
+    name: LEGACY_RETRIEVAL_PRESET,
+    desc: 'Legacy compatibility preset: previous Codegraph embedding model plus GNO-inspired retrieval roles.',
+    roles: {
+      embed: MODELS[LEGACY_TRANSFORMER_DEFAULT_MODEL]!.name,
+      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
+      expand: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
+      gen: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
+    },
+  },
+  [DEFAULT_RETRIEVAL_PRESET]: {
+    name: DEFAULT_RETRIEVAL_PRESET,
+    desc: 'Compact GNO-inspired local retrieval model roles.',
+    roles: {
+      embed: GNO_COMPACT_EMBEDDING_MODEL,
+      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
+      expand: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
+      gen: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
+    },
+  },
+  'gno-balanced': {
+    name: 'gno-balanced',
+    desc: 'Balanced GNO-inspired retrieval model roles.',
+    roles: {
+      embed: GNO_COMPACT_EMBEDDING_MODEL,
+      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
+      expand: 'hf:bartowski/Qwen2.5-3B-Instruct-GGUF/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
+      gen: 'hf:bartowski/Qwen2.5-3B-Instruct-GGUF/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
+    },
+  },
+  'gno-quality': {
+    name: 'gno-quality',
+    desc: 'Quality-oriented GNO-inspired retrieval model roles.',
+    roles: {
+      embed: GNO_COMPACT_EMBEDDING_MODEL,
+      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
+      expand: 'hf:unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
+      gen: 'hf:unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
+    },
+  },
+};
 const NPM_BIN = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const BATCH_SIZE_MAP: Record<string, number> = {
   minilm: 32,
@@ -86,14 +152,84 @@ const BATCH_SIZE_MAP: Record<string, number> = {
 };
 const DEFAULT_BATCH_SIZE = 32;
 
+export function getEmbeddingBatchSize(modelKeyOrUri?: string): number {
+  const batchModelKey = resolveModelKey(modelKeyOrUri);
+  return BATCH_SIZE_MAP[batchModelKey] ?? DEFAULT_BATCH_SIZE;
+}
+
+export function resolveModelKey(modelKeyOrUri?: string): string {
+  const requested = modelKeyOrUri || DEFAULT_MODEL;
+  if (MODELS[requested]) return requested;
+  const entry = Object.entries(MODELS).find(([, config]) => config.name === requested);
+  if (entry) return entry[0];
+  return requested;
+}
+
 /** @internal Used by generator.js — not part of the public barrel. */
 export function getModelConfig(modelKey?: string): ModelConfig {
-  const key = modelKey || DEFAULT_MODEL;
+  const key = resolveModelKey(modelKey);
   const config = MODELS[key];
   if (!config) {
     throw new ConfigError(`Unknown model: ${key}. Available: ${Object.keys(MODELS).join(', ')}`);
   }
   return config;
+}
+
+export function getEmbeddingModelConfig(modelKey?: string): ModelConfig {
+  const key = resolveModelKey(modelKey);
+  const config = MODELS[key];
+  if (config) return config;
+  return {
+    name: key,
+    dim: 0,
+    contextWindow: 8192,
+    desc: 'External embedding model',
+    quantized: false,
+  };
+}
+
+function resolveConfiguredEmbeddingUri(config?: CodegraphConfig): string | undefined {
+  const configuredModel = config?.embeddings?.model;
+  if (!configuredModel || configuredModel === DEFAULT_EMBEDDING_MODEL) return undefined;
+  const key = resolveModelKey(configuredModel);
+  return MODELS[key]?.name ?? configuredModel;
+}
+
+export function resolveRetrievalModels(config?: CodegraphConfig): ResolvedRetrievalModels {
+  const requestedPreset = config?.models?.preset || DEFAULT_RETRIEVAL_PRESET;
+  const preset =
+    RETRIEVAL_MODEL_PRESETS[requestedPreset] ?? RETRIEVAL_MODEL_PRESETS[DEFAULT_RETRIEVAL_PRESET]!;
+  const roles: ModelRoleMap = { ...preset.roles };
+  const overrides = config?.models?.roles;
+
+  const selectedBuiltInPresetWithOwnEmbedding =
+    requestedPreset !== DEFAULT_RETRIEVAL_PRESET &&
+    requestedPreset !== LEGACY_RETRIEVAL_PRESET &&
+    preset.name === requestedPreset;
+  const configuredEmbed = selectedBuiltInPresetWithOwnEmbedding
+    ? undefined
+    : resolveConfiguredEmbeddingUri(config);
+  const hasEmbedOverride = overrides?.embed != null;
+  if (configuredEmbed && !hasEmbedOverride) {
+    roles.embed = configuredEmbed;
+  }
+
+  if (overrides) {
+    for (const role of ['embed', 'rerank', 'expand', 'gen'] as const) {
+      const uri = overrides[role];
+      if (uri) roles[role] = uri;
+    }
+  }
+
+  return {
+    preset: preset.name,
+    requestedPreset: requestedPreset === preset.name ? undefined : requestedPreset,
+    roles,
+  };
+}
+
+export function resolveModelRoleUri(config: CodegraphConfig | undefined, role: ModelRole): string {
+  return resolveRetrievalModels(config).roles[role];
 }
 
 /**
@@ -223,6 +359,63 @@ async function loadModel(modelKey?: string): Promise<{ extractor: unknown; confi
   return { extractor, config };
 }
 
+class TransformerEmbeddingPort implements EmbeddingPort {
+  private readonly modelKey: string;
+  private loaded:
+    | {
+        ext: unknown;
+        config: ModelConfig;
+      }
+    | undefined;
+
+  constructor(modelKey: string = LEGACY_TRANSFORMER_DEFAULT_MODEL) {
+    this.modelKey = modelKey;
+  }
+
+  async embedBatch(texts: string[]): Promise<Float32Array[]> {
+    if (!this.loaded) {
+      const { extractor: ext, config } = await loadModel(this.modelKey);
+      this.loaded = { ext, config };
+    }
+
+    const { ext, config } = this.loaded;
+    const output =
+      (await // biome-ignore lint/complexity/noBannedTypes: dynamically loaded extractor is untyped
+      (ext as Function)(texts, { pooling: 'mean', normalize: true })) as {
+        data: number[];
+      };
+
+    const vectors: Float32Array[] = [];
+    for (let j = 0; j < texts.length; j++) {
+      const start = j * config.dim;
+      const vec = new Float32Array(config.dim);
+      for (let k = 0; k < config.dim; k++) {
+        vec[k] = output.data[start + k] ?? 0;
+      }
+      vectors.push(vec);
+    }
+    return vectors;
+  }
+
+  async reset(): Promise<void> {
+    this.loaded = undefined;
+    await disposeModel();
+  }
+}
+
+export function createTransformerEmbeddingPort(modelKey?: string): EmbeddingPort {
+  return new TransformerEmbeddingPort(modelKey ?? LEGACY_TRANSFORMER_DEFAULT_MODEL);
+}
+
+async function createFactoryEmbeddingPort(modelUri: string): Promise<EmbeddingPort> {
+  const { createEmbeddingPort } = await import('./embedding-factory.js');
+  return createEmbeddingPort(modelUri, { inputType: 'raw' });
+}
+
+function isTransformerModelKeyOrName(modelKeyOrUri: string): boolean {
+  return MODELS[resolveModelKey(modelKeyOrUri)] != null;
+}
+
 /**
  * Generate embeddings for an array of texts.
  */
@@ -230,32 +423,26 @@ export async function embed(
   texts: string[],
   modelKey?: string,
 ): Promise<{ vectors: Float32Array[]; dim: number }> {
-  const { extractor: ext, config } = await loadModel(modelKey);
-  const dim = config.dim;
-  const results: Float32Array[] = [];
-  const batchSize = BATCH_SIZE_MAP[modelKey || DEFAULT_MODEL] ?? DEFAULT_BATCH_SIZE;
-
-  for (let i = 0; i < texts.length; i += batchSize) {
-    const batch = texts.slice(i, i + batchSize);
-    const output =
-      (await // biome-ignore lint/complexity/noBannedTypes: dynamically loaded extractor is untyped
-      (ext as Function)(batch, { pooling: 'mean', normalize: true })) as {
-        data: number[];
-      };
-
-    for (let j = 0; j < batch.length; j++) {
-      const start = j * dim;
-      const vec = new Float32Array(dim);
-      for (let k = 0; k < dim; k++) {
-        vec[k] = output.data[start + k] ?? 0;
+  const modelKeyOrUri = modelKey ?? DEFAULT_MODEL;
+  const config = getEmbeddingModelConfig(modelKeyOrUri);
+  const batchSize = getEmbeddingBatchSize(modelKeyOrUri);
+  const basePort = isTransformerModelKeyOrName(modelKeyOrUri)
+    ? createTransformerEmbeddingPort(modelKeyOrUri)
+    : await createFactoryEmbeddingPort(modelKeyOrUri);
+  let embeddedCount = 0;
+  const progressPort: EmbeddingPort = {
+    async embedBatch(batch) {
+      const vectors = await basePort.embedBatch(batch);
+      embeddedCount += batch.length;
+      if (texts.length > batchSize) {
+        process.stderr.write(
+          `  Embedded ${Math.min(embeddedCount, texts.length)}/${texts.length}\r`,
+        );
       }
-      results.push(vec);
-    }
-
-    if (texts.length > batchSize) {
-      process.stderr.write(`  Embedded ${Math.min(i + batchSize, texts.length)}/${texts.length}\r`);
-    }
-  }
-
-  return { vectors: results, dim };
+      return vectors;
+    },
+    reset: () => basePort.reset?.(),
+  };
+  const vectors = await embedWithRecovery(progressPort, texts, { batchSize });
+  return { vectors, dim: config.dim || vectors[0]?.length || 0 };
 }

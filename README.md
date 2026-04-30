@@ -395,18 +395,21 @@ codegraph cycles --functions   # Function-level cycles
 
 ### Semantic Search
 
-Local embeddings for every function, method, and class — search by natural language. Everything runs locally using [@huggingface/transformers](https://huggingface.co/docs/transformers.js) — no API keys needed.
+Local embeddings for every function, method, and class — search by natural language. The default retrieval preset is `gno-compact` with the Qwen compact GGUF embedding role; legacy transformer aliases and HTTP embedding backends are documented in the [retrieval workflow guide](docs/guides/retrieval-workflow.md).
 
 ```bash
-codegraph embed                # Build embeddings (default: nomic-v1.5)
+codegraph embed                # Build embeddings (default: GNO/Qwen compact GGUF)
 codegraph embed --model nomic  # Use a different model
 codegraph search "handle authentication"
 codegraph search "parse config" --min-score 0.4 -n 10
 codegraph search "parseConfig" --mode keyword   # BM25 keyword-only (exact names)
 codegraph search "auth flow" --mode semantic    # Embedding-only (conceptual)
 codegraph search "auth flow" --mode hybrid      # BM25 + semantic RRF fusion (default)
+codegraph search "auth" --query-mode term:auth --query-mode intent:"validate bearer token" # Explicit routed variants
 codegraph models               # List available models
 ```
+
+For model roles/presets, re-embedding after model changes, stale-vector recovery, offline/cache policy, local GGUF setup, HTTP backends, expansion/rerank controls, structured query modes, and GNO attribution, see [Retrieval Workflow Guide](docs/guides/retrieval-workflow.md).
 
 #### Multi-query search
 
@@ -430,10 +433,10 @@ A single trailing semicolon is ignored (falls back to single-query mode). The `-
 | `jina-base` | jina-embeddings-v2-base-en | 768 | ~137 MB | Apache-2.0 | High quality, 8192 token context |
 | `jina-code` | jina-embeddings-v2-base-code | 768 | ~137 MB | Apache-2.0 | Best for code search, trained on code+text (requires HF token) |
 | `nomic` | nomic-embed-text-v1 | 768 | ~137 MB | Apache-2.0 | Good quality, 8192 context |
-| `nomic-v1.5` (default) | nomic-embed-text-v1.5 | 768 | ~137 MB | Apache-2.0 | **Improved nomic, Matryoshka dimensions** |
+| `nomic-v1.5` | nomic-embed-text-v1.5 | 768 | ~137 MB | Apache-2.0 | **Improved nomic, Matryoshka dimensions; legacy default** |
 | `bge-large` | bge-large-en-v1.5 | 1024 | ~335 MB | MIT | Best general retrieval, top MTEB scores |
 
-The model used during `embed` is stored in the database, so `search` auto-detects it — no need to pass `--model` when searching.
+Default embedding role: `hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf`. The model used during `embed` is stored in the database, so `search` auto-detects it — no need to pass `--model` when searching. Existing configs that set `embeddings.model` (for example `nomic-v1.5`) continue to override the default; use `models.preset: "codegraph-default"` to keep the legacy compatibility preset.
 
 ### Multi-Repo Registry
 

@@ -30,7 +30,14 @@ export const DEFAULTS = {
     defaultLimit: 20,
     excludeTests: false,
   },
-  embeddings: { model: 'nomic-v1.5', llmProvider: null as string | null },
+  embeddings: {
+    model: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+    llmProvider: null as string | null,
+  },
+  models: {
+    preset: 'gno-compact',
+    roles: {} as Partial<Record<'embed' | 'rerank' | 'expand' | 'gen', string>>,
+  },
   llm: {
     provider: null as string | null,
     model: null as string | null,
@@ -38,7 +45,28 @@ export const DEFAULTS = {
     apiKey: null as string | null,
     apiKeyCommand: null as string | null,
   },
-  search: { defaultMinScore: 0.2, rrfK: 60, topK: 15, similarityWarnThreshold: 0.85 },
+  search: {
+    defaultMinScore: 0.2,
+    rrfK: 60,
+    topK: 15,
+    similarityWarnThreshold: 0.85,
+    rrfWeights: {
+      bm25: 2,
+      bm25Variant: 0.5,
+      vector: 2,
+      vectorVariant: 0.5,
+      hyde: 0.7,
+    },
+    topRankBonus: 0.1,
+    topRankThreshold: 5,
+    nearTopRankBonusMultiplier: 0.4,
+    rerank: {
+      enabled: false,
+      maxCandidates: 20,
+      fusionWeight: 0.4,
+      rerankWeight: 0.6,
+    },
+  },
   ci: { failOnCycles: false, impactThreshold: null as number | null },
   manifesto: {
     rules: {

@@ -79,7 +79,7 @@
     "node": ">=22.6"
   },
   "scripts": {
-    "build": "tsc && node -e \"require('fs').writeFileSync('dist/index.cjs',require('fs').readFileSync('src/index.cjs','utf8').replaceAll('./index.ts','./index.js'))\"",
+    "build": "tsc --build --force && node -e \"require('fs').mkdirSync('dist',{recursive:true});require('fs').writeFileSync('dist/index.cjs',require('fs').readFileSync('src/index.cjs','utf8').replaceAll('./index.ts','./index.js'))\"",
     "build:wasm": "node scripts/node-ts.js scripts/build-wasm.ts",
     "typecheck": "tsc --noEmit",
     "verify-imports": "node scripts/node-ts.js scripts/verify-imports.ts",
@@ -122,10 +122,18 @@
     "web-tree-sitter": "^0.26.5"
   },
   "peerDependencies": {
-    "@huggingface/transformers": "^4.0.1"
+    "@huggingface/transformers": "^4.0.1",
+    "node-llama-cpp": "^3.0.0",
+    "sqlite-vec": "^0.1.9"
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": {
+      "optional": true
+    },
+    "node-llama-cpp": {
+      "optional": true
+    },
+    "sqlite-vec": {
       "optional": true
     }
   },

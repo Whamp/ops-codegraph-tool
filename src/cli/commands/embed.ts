@@ -1,6 +1,40 @@
 import path from 'node:path';
-import { buildEmbeddings, DEFAULT_MODEL, EMBEDDING_STRATEGIES } from '../../domain/search/index.js';
+import { isHttpModelUri } from '../../domain/search/http-embedding.js';
+import {
+  buildEmbeddings,
+  DEFAULT_MODEL,
+  EMBEDDING_STRATEGIES,
+  MODELS,
+  resolveModelRoleUri,
+} from '../../domain/search/index.js';
+import { isGgufModelUri } from '../../domain/search/model-cache.js';
+import { warn } from '../../infrastructure/logger.js';
 import type { CommandDefinition } from '../types.js';
+
+function isSupportedEmbeddingModel(model: string): boolean {
+  return (
+    MODELS[model] != null ||
+    Object.values(MODELS).some((config) => config.name === model) ||
+    isHttpModelUri(model) ||
+    isGgufModelUri(model)
+  );
+}
+
+function resolveEmbedCommandModel(
+  explicitModel: string | undefined,
+  config: Parameters<typeof resolveModelRoleUri>[0],
+): string {
+  if (explicitModel) return explicitModel;
+
+  const roleModel = resolveModelRoleUri(config, 'embed');
+  if (isSupportedEmbeddingModel(roleModel)) return roleModel;
+
+  const legacyModel = config?.embeddings?.model || DEFAULT_MODEL;
+  warn(
+    `Embed role resolved to unsupported embedding model "${roleModel}"; using configured embedding model "${legacyModel}" instead.`,
+  );
+  return legacyModel;
+}
 
 export const command: CommandDefinition = {
   name: 'embed [dir]',
@@ -9,7 +43,7 @@ export const command: CommandDefinition = {
   options: [
     [
       '-m, --model <name>',
-      'Embedding model (default from config or minilm). Run `codegraph models` for details',
+      'Embedding model (default from config: GNO/Qwen compact GGUF). Run `codegraph models` for details',
     ],
     [
       '-s, --strategy <name>',
@@ -25,8 +59,7 @@ export const command: CommandDefinition = {
   },
   async execute([dir], opts, ctx) {
     const root = path.resolve(dir || '.');
-    const embeddingsConfig = ctx.config.embeddings;
-    const model = (opts.model as string) || (embeddingsConfig?.model as string) || DEFAULT_MODEL;
+    const model = resolveEmbedCommandModel(opts.model as string | undefined, ctx.config);
     await buildEmbeddings(root, model, opts.db as string | undefined, { strategy: opts.strategy });
   },
 };

@@ -15,6 +15,7 @@ export interface FtsSearchOpts {
 interface FtsRow {
   node_id: number;
   bm25_score: number;
+  content?: string | null;
   name: string;
   kind: string;
   file: string;
@@ -54,7 +55,7 @@ export function ftsSearchData(
     }
 
     let sql = `
-      SELECT f.rowid AS node_id, rank AS bm25_score,
+      SELECT f.rowid AS node_id, rank AS bm25_score, f.content AS content,
              n.name, n.kind, n.file, n.line, n.end_line, n.role
       FROM fts_index f
       JOIN nodes n ON f.rowid = n.id
@@ -92,6 +93,7 @@ export function ftsSearchData(
     const results = rows.slice(0, limit).map((row) => ({
       ...normalizeSymbol(row, db, hc),
       bm25Score: -row.bm25_score,
+      content: row.content ?? undefined,
     }));
 
     return { results };

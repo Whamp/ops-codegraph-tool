@@ -311,6 +311,53 @@ const BASE_TOOLS: ToolSchema[] = [
           description:
             'Search mode: hybrid (BM25 + semantic, default), semantic (embeddings only), keyword (BM25 only)',
         },
+        expand: {
+          type: 'boolean',
+          description:
+            'Enable query expansion for hybrid search (default: true for MCP hybrid mode)',
+        },
+        no_expand: {
+          type: 'boolean',
+          description: 'Disable query expansion for this request',
+        },
+        rerank: {
+          type: 'boolean',
+          description: 'Enable reranking for this request when a reranker is configured',
+        },
+        no_rerank: {
+          type: 'boolean',
+          description: 'Disable reranking for this request',
+        },
+        rerank_candidates: {
+          type: 'number',
+          description: 'Number of fused candidates eligible for reranking',
+        },
+        rrf_k: { type: 'number', description: 'RRF k parameter for hybrid fusion' },
+        query_mode: {
+          oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+          description: 'Structured query mode entries: term:<text>, intent:<text>, or hyde:<text>',
+        },
+        query_modes: {
+          type: 'array',
+          items: {
+            oneOf: [
+              { type: 'string' },
+              {
+                type: 'object',
+                properties: {
+                  mode: { type: 'string', enum: ['term', 'intent', 'hyde'] },
+                  text: { type: 'string' },
+                },
+                required: ['mode', 'text'],
+              },
+            ],
+          },
+          description: 'Structured query mode entries for agents: strings or {mode,text} objects',
+        },
+        explain: {
+          type: 'boolean',
+          description: 'Include weighted fusion/rerank explanation metadata when available',
+        },
         ...PAGINATION_PROPS,
       },
       required: ['query'],
