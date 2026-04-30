@@ -26,6 +26,8 @@ export interface SemanticSearchOpts {
   queryModes?: QueryModeInput[];
   queryTextKind?: QueryTextKind;
   explain?: boolean;
+  /** Injected rerank port for cross-encoder reranking (default-off unless provided + config enabled) */
+  rerankPort?: import('./rerank.js').RerankPort;
 }
 
 interface SemanticResult {

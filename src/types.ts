@@ -1154,6 +1154,12 @@ export interface CodegraphConfig {
     topRankBonus?: number;
     topRankThreshold?: number;
     nearTopRankBonusMultiplier?: number;
+    rerank?: {
+      enabled?: boolean;
+      maxCandidates?: number;
+      fusionWeight?: number;
+      rerankWeight?: number;
+    };
   };
 
   ci: {

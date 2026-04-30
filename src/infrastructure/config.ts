@@ -57,6 +57,12 @@ export const DEFAULTS = {
     topRankBonus: 0.1,
     topRankThreshold: 5,
     nearTopRankBonusMultiplier: 0.4,
+    rerank: {
+      enabled: false,
+      maxCandidates: 20,
+      fusionWeight: 0.4,
+      rerankWeight: 0.6,
+    },
   },
   ci: { failOnCycles: false, impactThreshold: null as number | null },
   manifesto: {

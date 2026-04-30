@@ -11,8 +11,20 @@ import {
   weightedRrfFuse,
 } from './fusion.js';
 import { ftsSearchData } from './keyword.js';
+import {
+  type RerankCandidate,
+  type RerankExplain,
+  type RerankPort,
+  rerankCandidates,
+} from './rerank.js';
 import type { SemanticSearchOpts } from './semantic.js';
 import { searchData } from './semantic.js';
+
+interface RerankResultMeta {
+  rerankScore: number | null;
+  blendedScore: number;
+  rerankExplain?: RerankExplain;
+}
 
 interface HybridResult {
   name: string;
@@ -28,6 +40,8 @@ interface HybridResult {
   similarity: number | null;
   semanticRank: number | null;
   explain?: FusionExplain;
+  /** Rerank metadata — present only when reranking was applied */
+  rerank?: RerankResultMeta;
 }
 
 export interface HybridSearchResult {
@@ -185,6 +199,7 @@ function mapFusedResult(
   metrics: ResultMetrics | undefined,
   explain: FusionExplain,
   includeExplain: boolean,
+  rerankMeta?: RerankResultMeta,
 ): HybridResult {
   const payload = metrics?.payload;
   return {
@@ -201,31 +216,67 @@ function mapFusedResult(
     similarity: metrics?.similarity ?? null,
     semanticRank: metrics?.semanticRank ?? null,
     ...(includeExplain ? { explain } : {}),
+    ...(rerankMeta ? { rerank: rerankMeta } : {}),
   };
 }
 
-/** Weighted Reciprocal Rank Fusion: merge ranked lists into a single scored result set. */
-function fuseResults(
-  rankedLists: RankedFusionInput<RankedPayload>[],
-  config: CodegraphConfig['search'],
-  limit: number,
-  includeExplain: boolean,
-): HybridResult[] {
-  const fused = weightedRrfFuse(rankedLists, {
-    k: config.rrfK,
-    weights: weightsFromConfig(config),
-    topRankBonus: config.topRankBonus ?? 0,
-    topRankThreshold: config.topRankThreshold ?? 0,
-    nearTopRankBonusMultiplier:
-      config.nearTopRankBonusMultiplier ?? DEFAULTS.search.nearTopRankBonusMultiplier,
-  });
-  const metrics = metricsFromRankedLists(rankedLists);
+/** Apply cross-encoder reranking to fused results if a rerank port is available. */
+async function applyReranking(
+  fusedResults: Array<{ key: string; score: number; payload?: RankedPayload }>,
+  query: string,
+  rerankPort: RerankPort | null | undefined,
+  searchCfg: CodegraphConfig['search'],
+  opts: SemanticSearchOpts,
+): Promise<Map<string, RerankResultMeta>> {
+  const rerankMetaBykey = new Map<string, RerankResultMeta>();
 
-  return fused
-    .slice(0, limit)
-    .map((result) =>
-      mapFusedResult(result.score, metrics.get(result.key), result.explain, includeExplain),
-    );
+  const rerankEnabled = searchCfg.rerank?.enabled ?? false;
+  if (!rerankPort || !rerankEnabled) return rerankMetaBykey;
+
+  const maxCandidates =
+    searchCfg.rerank?.maxCandidates ?? DEFAULTS.search.rerank?.maxCandidates ?? 20;
+  const fusionWeight =
+    searchCfg.rerank?.fusionWeight ?? DEFAULTS.search.rerank?.fusionWeight ?? 0.4;
+  const rerankWeight =
+    searchCfg.rerank?.rerankWeight ?? DEFAULTS.search.rerank?.rerankWeight ?? 0.6;
+
+  const candidates: RerankCandidate[] = fusedResults.map((r) => ({
+    key: r.key,
+    name: (r.payload as RankedPayload | undefined)?.name ?? '',
+    kind: (r.payload as RankedPayload | undefined)?.kind ?? '',
+    file: (r.payload as RankedPayload | undefined)?.file ?? '',
+    line: (r.payload as RankedPayload | undefined)?.line ?? 0,
+    fusionScore: r.score,
+    bm25Rank: null, // Will be filled from metrics in the caller context
+  }));
+
+  // Build intent from query modes if available
+  const intentParts: string[] = [];
+  if (opts.queryModes) {
+    for (const qm of opts.queryModes) {
+      if (qm.mode === 'intent' && qm.text) {
+        intentParts.push(qm.text);
+      }
+    }
+  }
+  const intent = intentParts.length > 0 ? intentParts.join('; ') : undefined;
+
+  const rerankOutput = await rerankCandidates(rerankPort, query, candidates, {
+    maxCandidates,
+    fusionWeight,
+    rerankWeight,
+    intent,
+  });
+
+  for (const candidate of rerankOutput.candidates) {
+    rerankMetaBykey.set(candidate.key, {
+      rerankScore: candidate.rerankScore,
+      blendedScore: candidate.blendedScore,
+      rerankExplain: candidate.explain,
+    });
+  }
+
+  return rerankMetaBykey;
 }
 
 export async function hybridSearchData(
@@ -245,12 +296,34 @@ export async function hybridSearchData(
 
   const queries = parseQueries(query);
   const rankedLists = await collectRankedLists(queries, customDbPath, opts, topK);
-  const results = fuseResults(
-    rankedLists,
-    { ...searchCfg, rrfK: opts.rrfK ?? searchCfg.rrfK },
-    limit,
-    opts.explain ?? false,
-  );
+  const fused = weightedRrfFuse(rankedLists, {
+    k: opts.rrfK ?? searchCfg.rrfK,
+    weights: weightsFromConfig(searchCfg),
+    topRankBonus: searchCfg.topRankBonus ?? 0,
+    topRankThreshold: searchCfg.topRankThreshold ?? 0,
+    nearTopRankBonusMultiplier:
+      searchCfg.nearTopRankBonusMultiplier ?? DEFAULTS.search.nearTopRankBonusMultiplier,
+  });
+
+  // Apply reranking if port provided and enabled
+  const rerankPort = (opts as SemanticSearchOpts & { rerankPort?: RerankPort }).rerankPort;
+  let rerankMetaBykey = new Map<string, RerankResultMeta>();
+  if (rerankPort && (searchCfg.rerank?.enabled ?? false)) {
+    rerankMetaBykey = await applyReranking(fused, query, rerankPort, searchCfg, opts);
+  }
+
+  const metrics = metricsFromRankedLists(rankedLists);
+  const results = fused
+    .slice(0, limit)
+    .map((result) =>
+      mapFusedResult(
+        result.score,
+        metrics.get(result.key),
+        result.explain,
+        opts.explain ?? false,
+        rerankMetaBykey.get(result.key),
+      ),
+    );
 
   return { results };
 }
