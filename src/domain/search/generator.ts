@@ -188,7 +188,12 @@ export async function buildEmbeddings(
   const insertAll = db.transaction(() => {
     for (let i = 0; i < vectors.length; i++) {
       const vec = vectors[i] as Float32Array;
-      insert.run(nodeIds[i], Buffer.from(vec.buffer), previews[i], texts[i]);
+      insert.run(
+        nodeIds[i],
+        Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength),
+        previews[i],
+        texts[i],
+      );
       insertFts.run(nodeIds[i], nodeNames[i], texts[i]);
     }
     insertMeta.run('model', config.name);

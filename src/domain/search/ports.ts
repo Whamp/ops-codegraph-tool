@@ -1,3 +1,5 @@
+import { CodegraphError } from '../../shared/errors.js';
+
 export interface EmbeddingPort {
   embedBatch(texts: string[]): Promise<Float32Array[]>;
   reset?(): Promise<void> | void;
@@ -40,6 +42,10 @@ async function embedRange(
     }
     return vectors;
   } catch (error) {
+    if (error instanceof CodegraphError) {
+      throw error;
+    }
+
     if (texts.length === 1) {
       failures.push({ index: offset, text: texts[0] ?? '', error });
       return [undefined];

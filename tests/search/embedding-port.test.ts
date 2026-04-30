@@ -6,6 +6,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { initSchema } from '../../src/db/index.js';
 import { buildEmbeddings } from '../../src/domain/search/generator.js';
 import { type EmbeddingPort, embedWithRecovery } from '../../src/domain/search/ports.js';
+import { EngineError } from '../../src/shared/errors.js';
 
 function vec(value: number): Float32Array {
   return new Float32Array([value, value + 0.5]);
@@ -84,6 +85,23 @@ describe('embedWithRecovery', () => {
       embedWithRecovery(port, ['good', 'bad', 'also-good'], { batchSize: 3 }),
     ).rejects.toThrow(/Failed to embed 1 of 3 item\(s\).*bad input: bad/s);
   });
+
+  test('rethrows EngineError unchanged without retrying or wrapping', async () => {
+    const engineError = new EngineError('install @huggingface/transformers', {
+      code: 'ENGINE_UNAVAILABLE',
+    });
+    const port: EmbeddingPort = {
+      embedBatch: vi.fn(async () => {
+        throw engineError;
+      }),
+      reset: vi.fn(),
+    };
+
+    await expect(embedWithRecovery(port, ['a', 'b'], { batchSize: 2 })).rejects.toBe(engineError);
+    expect(port.embedBatch).toHaveBeenCalledTimes(1);
+    expect(port.embedBatch).toHaveBeenCalledWith(['a', 'b']);
+    expect(port.reset).not.toHaveBeenCalled();
+  });
 });
 
 describe('buildEmbeddings embedding port integration', () => {
@@ -103,8 +121,10 @@ describe('buildEmbeddings embedding port integration', () => {
         .run('add', 'function', 'math.js', 1, 1).lastInsertRowid;
       db.close();
 
+      const backing = new Float32Array([99, 0.25, 0.75, 100]);
+      const vector = new Float32Array(backing.buffer, Float32Array.BYTES_PER_ELEMENT, 2);
       const port: EmbeddingPort = {
-        embedBatch: vi.fn(async (texts) => texts.map(() => new Float32Array([0.25, 0.75]))),
+        embedBatch: vi.fn(async (texts) => texts.map(() => vector)),
       };
 
       await buildEmbeddings(tmpDir, 'minilm', dbPath, { strategy: 'source', embeddingPort: port });
