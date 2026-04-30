@@ -39,12 +39,16 @@ export type {
 } from './models.js';
 export {
   createTransformerEmbeddingPort,
+  DEFAULT_EMBEDDING_MODEL,
   DEFAULT_MODEL,
   DEFAULT_RETRIEVAL_PRESET,
   disposeModel,
   EMBEDDING_STRATEGIES,
   embed,
+  GNO_COMPACT_EMBEDDING_MODEL,
   getEmbeddingBatchSize,
+  LEGACY_RETRIEVAL_PRESET,
+  LEGACY_TRANSFORMER_DEFAULT_MODEL,
   MODELS,
   RETRIEVAL_MODEL_PRESETS,
   resolveModelKey,

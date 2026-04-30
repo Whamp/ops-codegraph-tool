@@ -31,7 +31,7 @@ function resolveEmbedCommandModel(
 
   const legacyModel = config?.embeddings?.model || DEFAULT_MODEL;
   warn(
-    `Embed role resolved to unsupported model "${roleModel}" for the current transformer runtime; using legacy embedding model "${legacyModel}".`,
+    `Embed role resolved to unsupported embedding model "${roleModel}"; using configured embedding model "${legacyModel}" instead.`,
   );
   return legacyModel;
 }
@@ -43,7 +43,7 @@ export const command: CommandDefinition = {
   options: [
     [
       '-m, --model <name>',
-      'Embedding model (default from config or minilm). Run `codegraph models` for details',
+      'Embedding model (default from config: GNO/Qwen compact GGUF). Run `codegraph models` for details',
     ],
     [
       '-s, --strategy <name>',

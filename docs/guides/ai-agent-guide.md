@@ -556,13 +556,14 @@ Generate embeddings for all symbols. Required before `search` works.
 
 ```bash
 codegraph embed .
-codegraph embed . --model jina-code
+codegraph embed . --model hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf
+codegraph embed . --model nomic-v1.5
 ```
 
 | | |
 |---|---|
 | **MCP tool** | (use via CLI) |
-| **Key flags** | `-m, --model` (minilm, jina-small, jina-base, jina-code, nomic, nomic-v1.5, bge-large) |
+| **Key flags** | `-m, --model <name-or-uri>` (defaults to the GNO/Qwen embedding model; legacy names such as `nomic-v1.5` remain available) |
 | **When to use** | Initial setup, or after adding many new functions |
 
 #### `export` — Export graph

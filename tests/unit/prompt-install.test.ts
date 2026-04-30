@@ -185,4 +185,30 @@ describe('loadTransformers install prompt', () => {
     expect(result.dim).toBe(384);
     expect(exitSpy).not.toHaveBeenCalled();
   });
+
+  test('createTransformerEmbeddingPort without a model keeps the legacy transformer default', async () => {
+    process.stdin.isTTY = undefined;
+
+    const pipelineMock = vi.fn(async () => async (batch: string[]) => ({
+      data: new Float32Array(768 * batch.length),
+    }));
+    vi.doMock('node:readline', () => ({ createInterface: vi.fn() }));
+    vi.doMock('node:child_process', () => ({ execFileSync: vi.fn() }));
+    vi.doMock('@huggingface/transformers', () => ({
+      pipeline: pipelineMock,
+      cos_sim: () => 0,
+    }));
+
+    const { createTransformerEmbeddingPort, MODELS, LEGACY_TRANSFORMER_DEFAULT_MODEL } =
+      await import('../../src/domain/search/index.js');
+
+    const vectors = await createTransformerEmbeddingPort().embedBatch(['test text']);
+
+    expect(vectors).toHaveLength(1);
+    expect(pipelineMock).toHaveBeenCalledWith(
+      'feature-extraction',
+      MODELS[LEGACY_TRANSFORMER_DEFAULT_MODEL]!.name,
+      {},
+    );
+  });
 });

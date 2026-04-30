@@ -58,7 +58,11 @@ describe('DEFAULTS', () => {
   });
 
   it('has embeddings defaults', () => {
-    expect(DEFAULTS.embeddings).toEqual({ model: 'nomic-v1.5', llmProvider: null });
+    expect(DEFAULTS.embeddings).toEqual({
+      model: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+      llmProvider: null,
+    });
+    expect(DEFAULTS.models.preset).toBe('gno-compact');
   });
 
   it('has llm defaults', () => {

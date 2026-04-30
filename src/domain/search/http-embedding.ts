@@ -18,10 +18,12 @@ export function isHttpModelUri(uri: string): boolean {
 }
 
 export class HttpEmbeddingPort implements EmbeddingPort {
+  private readonly modelUri: string;
   private readonly apiUrl: string;
   private readonly modelName: string;
 
-  constructor(private readonly modelUri: string) {
+  constructor(modelUri: string) {
+    this.modelUri = modelUri;
     const hashIndex = modelUri.indexOf('#');
     if (hashIndex > 0) {
       this.apiUrl = modelUri.slice(0, hashIndex);
