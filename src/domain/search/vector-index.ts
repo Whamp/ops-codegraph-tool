@@ -303,6 +303,8 @@ export function createVectorIndex(
           `Vector row metadata/dimension does not match active index metadata for node ${mismatch.nodeId}`,
         );
       }
+      const wasDirty = vecDirty;
+      this.vecDirty = true;
       try {
         ensureStorageTable(db);
         const insert = db.prepare(
@@ -335,6 +337,7 @@ export function createVectorIndex(
             tableName,
             rows.filter((row) => row.metadataKey === metadataKey),
           );
+          if (!wasDirty) this.vecDirty = false;
         } catch (error) {
           this.vecDirty = true;
           warn(
@@ -345,6 +348,8 @@ export function createVectorIndex(
       return ok(undefined);
     },
     deleteVectors(nodeIds) {
+      const wasDirty = vecDirty;
+      this.vecDirty = true;
       try {
         ensureStorageTable(db);
         const del = db.prepare(
@@ -363,6 +368,7 @@ export function createVectorIndex(
       if (searchAvailable) {
         try {
           driver.delete(db, tableName, nodeIds);
+          if (!wasDirty) this.vecDirty = false;
         } catch {
           this.vecDirty = true;
         }

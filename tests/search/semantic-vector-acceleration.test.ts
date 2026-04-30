@@ -20,6 +20,7 @@ vi.mock('@huggingface/transformers', () => ({
 
 import {
   type ActiveEmbeddingMetadata,
+  buildEmbeddings,
   createVectorIndex,
   encodeEmbedding,
   searchData,
@@ -43,7 +44,10 @@ const active: ActiveEmbeddingMetadata = {
   formatterVersion: 'codegraph-symbol-text-v1',
 };
 
-function fakeDriver(searchImpl?: VectorAccelerationDriver['search']): VectorAccelerationDriver {
+function fakeDriver(
+  searchImpl?: VectorAccelerationDriver['search'],
+  overrides: Partial<VectorAccelerationDriver> = {},
+): VectorAccelerationDriver {
   return {
     load: vi.fn(),
     createTable: vi.fn(),
@@ -52,6 +56,7 @@ function fakeDriver(searchImpl?: VectorAccelerationDriver['search']): VectorAcce
     rebuild: vi.fn(),
     sync: vi.fn(() => ({ added: 0, removed: 0 })),
     search: vi.fn(searchImpl ?? ((_db, _table, _query, _k) => [{ nodeId: 2, distance: 0.01 }])),
+    ...overrides,
   };
 }
 
@@ -152,6 +157,34 @@ describe('semantic search vector acceleration', () => {
       kind: 'function',
       filePattern: 'a.ts',
     });
+
+    expect(result?.results.map((r) => r.name)).toEqual(['bruteForceWinner']);
+    expect(driver.search).not.toHaveBeenCalled();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('falls back to brute force after full re-embed replaces vector storage while acceleration is unavailable', async () => {
+    const { dir, dbPath } = fixture();
+    fs.writeFileSync(path.join(dir, 'a.ts'), 'export function bruteForceWinner() { return 1; }\n');
+    fs.writeFileSync(path.join(dir, 'b.ts'), 'export function acceleratedWinner() { return 2; }\n');
+    setVectorAccelerationDriverForTests(
+      fakeDriver(undefined, {
+        load: () => {
+          throw new Error('sqlite-vec unavailable during re-embed');
+        },
+      }),
+    );
+
+    await buildEmbeddings(dir, 'minilm', dbPath, {
+      embeddingPort: {
+        embedBatch: async (texts) =>
+          texts.map((_, i) => (i === 0 ? makeVec([1, 0]) : makeVec([0, 1]))),
+      },
+    });
+
+    const driver = fakeDriver(() => [{ nodeId: 2, distance: 0.01 }]);
+    setVectorAccelerationDriverForTests(driver);
+    const result = await searchData('query', dbPath, { minScore: 0.9 });
 
     expect(result?.results.map((r) => r.name)).toEqual(['bruteForceWinner']);
     expect(driver.search).not.toHaveBeenCalled();

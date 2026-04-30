@@ -207,6 +207,7 @@ export async function buildEmbeddings(
   });
   const vectorIndex = createVectorIndex(db, activeMetadata);
   const metadataKey = vectorStorageKey(activeMetadata);
+  vectorIndex.vecDirty = true;
   db.prepare('DELETE FROM embedding_vectors WHERE metadata_key = ?').run(metadataKey);
 
   const insert = db.prepare(
