@@ -54,13 +54,19 @@ function bruteForceSemanticResults(
   return results;
 }
 
+function hasSemanticFilters(opts: SemanticSearchOpts): boolean {
+  return Boolean(opts.kind || opts.filePattern || opts.noTests);
+}
+
 function tryAcceleratedSemanticResults(
   prepared: PreparedSearch,
   queryVec: Float32Array,
   activeMetadata: ReturnType<typeof expectedEmbeddingMetadata>,
   limit: number,
   minScore: number,
+  filtersActive: boolean,
 ): SemanticResult[] | null {
+  if (filtersActive) return null;
   const { db, rows } = prepared;
   const vectorIndex = createVectorIndex(db, activeMetadata, { mode: 'search' });
   const accelerated = vectorIndex.searchNearest(queryVec, limit, { minScore });
@@ -136,6 +142,7 @@ export async function searchData(
           activeMetadata,
           limit,
           minScore,
+          hasSemanticFilters(opts),
         )
       : null;
     const results =

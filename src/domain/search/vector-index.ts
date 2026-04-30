@@ -114,7 +114,37 @@ function ensureStorageTable(db: BetterSqlite3Database): void {
       FOREIGN KEY(node_id) REFERENCES nodes(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_embedding_vectors_model ON embedding_vectors(metadata_key, node_id);
+    CREATE TABLE IF NOT EXISTS embedding_vector_index_meta (
+      metadata_key TEXT PRIMARY KEY,
+      healthy INTEGER NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+}
+
+function hasVectorIndexMetaTable(db: BetterSqlite3Database): boolean {
+  const row = db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'embedding_vector_index_meta'",
+    )
+    .get();
+  return Boolean(row);
+}
+
+function readVecDirty(db: BetterSqlite3Database, metadataKey: string): boolean {
+  if (!hasVectorIndexMetaTable(db)) return false;
+  const row = db
+    .prepare('SELECT healthy FROM embedding_vector_index_meta WHERE metadata_key = ?')
+    .get(metadataKey) as { healthy: number } | undefined;
+  return row ? row.healthy !== 1 : false;
+}
+
+function writeVecDirty(db: BetterSqlite3Database, metadataKey: string, dirty: boolean): void {
+  ensureStorageTable(db);
+  db.prepare(
+    `INSERT OR REPLACE INTO embedding_vector_index_meta (metadata_key, healthy, updated_at)
+     VALUES (?, ?, CURRENT_TIMESTAMP)`,
+  ).run(metadataKey, dirty ? 0 : 1);
 }
 
 function readRows(db: BetterSqlite3Database, metadataKey: string, modelUri: string): VectorRow[] {
@@ -215,6 +245,7 @@ export function createVectorIndex(
 
   try {
     if (options.mode !== 'search') ensureStorageTable(db);
+    vecDirty = readVecDirty(db, metadataKey);
   } catch (error) {
     loadError = error instanceof Error ? error.message : String(error);
   }
@@ -251,8 +282,27 @@ export function createVectorIndex(
     },
     set vecDirty(value: boolean) {
       vecDirty = value;
+      try {
+        writeVecDirty(db, metadataKey, value);
+      } catch (error) {
+        warn(
+          `Vector acceleration health metadata write failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     },
     upsertVectors(rows) {
+      const mismatch = rows.find(
+        (row) =>
+          row.metadataKey !== metadataKey ||
+          row.model !== metadata.modelUri ||
+          row.embedding.length !== metadata.dimension,
+      );
+      if (mismatch) {
+        return err(
+          'VECTOR_METADATA_MISMATCH',
+          `Vector row metadata/dimension does not match active index metadata for node ${mismatch.nodeId}`,
+        );
+      }
       try {
         ensureStorageTable(db);
         const insert = db.prepare(
@@ -286,7 +336,7 @@ export function createVectorIndex(
             rows.filter((row) => row.metadataKey === metadataKey),
           );
         } catch (error) {
-          vecDirty = true;
+          this.vecDirty = true;
           warn(
             `Vector acceleration write failed; falling back to brute-force search until sync succeeds: ${error instanceof Error ? error.message : String(error)}`,
           );
@@ -314,7 +364,7 @@ export function createVectorIndex(
         try {
           driver.delete(db, tableName, nodeIds);
         } catch {
-          vecDirty = true;
+          this.vecDirty = true;
         }
       }
       return ok(undefined);
@@ -324,6 +374,12 @@ export function createVectorIndex(
         return err(
           'VECTOR_SEARCH_UNAVAILABLE',
           `Vector acceleration is unavailable. ${loadError ? `Reason: ${loadError}. ` : ''}${SQLITE_VEC_GUIDANCE}`,
+        );
+      }
+      if (vecDirty) {
+        return err(
+          'VECTOR_INDEX_DIRTY',
+          'Vector acceleration index is dirty; falling back to brute-force semantic search until sync succeeds.',
         );
       }
       try {
@@ -349,10 +405,10 @@ export function createVectorIndex(
       if (!searchAvailable) return ok(undefined);
       try {
         driver.rebuild(db, tableName, storageRows());
-        vecDirty = false;
+        this.vecDirty = false;
         return ok(undefined);
       } catch (error) {
-        vecDirty = true;
+        this.vecDirty = true;
         return err(
           'VECTOR_REBUILD_FAILED',
           `Vector acceleration rebuild failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -363,10 +419,10 @@ export function createVectorIndex(
       if (!searchAvailable) return ok({ added: 0, removed: 0 });
       try {
         const result = driver.sync(db, tableName, storageRows());
-        vecDirty = false;
+        this.vecDirty = false;
         return ok(result);
       } catch (error) {
-        vecDirty = true;
+        this.vecDirty = true;
         return err(
           'VECTOR_SYNC_FAILED',
           `Vector acceleration sync failed: ${error instanceof Error ? error.message : String(error)}`,

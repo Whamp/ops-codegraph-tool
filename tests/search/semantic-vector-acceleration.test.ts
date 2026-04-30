@@ -20,6 +20,7 @@ vi.mock('@huggingface/transformers', () => ({
 
 import {
   type ActiveEmbeddingMetadata,
+  createVectorIndex,
   encodeEmbedding,
   searchData,
   setVectorAccelerationDriverForTests,
@@ -136,6 +137,42 @@ describe('semantic search vector acceleration', () => {
     const result = await searchData('query', dbPath, { minScore: 0.9 });
 
     expect(result?.results.map((r) => r.name)).toEqual(['bruteForceWinner']);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('uses brute-force semantic search when filters are active so filtered top-k is complete', async () => {
+    const { dir, dbPath } = fixture();
+    const driver = fakeDriver((_db, _table, _query, k) =>
+      [{ nodeId: 2, distance: 0.01 }].slice(0, k),
+    );
+    setVectorAccelerationDriverForTests(driver);
+
+    const result = await searchData('query', dbPath, {
+      minScore: 0,
+      kind: 'function',
+      filePattern: 'a.ts',
+    });
+
+    expect(result?.results.map((r) => r.name)).toEqual(['bruteForceWinner']);
+    expect(driver.search).not.toHaveBeenCalled();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('falls back to brute force in a fresh process after persisted dirty acceleration state', async () => {
+    const { dir, dbPath } = fixture();
+    const writerDb = new Database(dbPath);
+    const dirty = createVectorIndex(writerDb, active, {
+      driver: fakeDriver(() => [{ nodeId: 2, distance: 0.01 }]),
+    });
+    dirty.vecDirty = true;
+    writerDb.close();
+    const driver = fakeDriver(() => [{ nodeId: 2, distance: 0.01 }]);
+    setVectorAccelerationDriverForTests(driver);
+
+    const result = await searchData('query', dbPath, { minScore: 0.9 });
+
+    expect(result?.results.map((r) => r.name)).toEqual(['bruteForceWinner']);
+    expect(driver.search).not.toHaveBeenCalled();
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

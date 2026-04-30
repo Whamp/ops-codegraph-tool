@@ -250,9 +250,9 @@ export async function buildEmbeddings(
   );
   if (!vectorWrite.ok) {
     warn(vectorWrite.error.message);
-  } else if (vectorIndex.vecDirty) {
-    const sync = vectorIndex.syncVecIndex();
-    if (!sync.ok) warn(sync.error.message);
+  } else {
+    const rebuild = vectorIndex.rebuildVecIndex();
+    if (!rebuild.ok) warn(rebuild.error.message);
   }
 
   console.log(

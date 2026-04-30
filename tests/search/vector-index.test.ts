@@ -152,6 +152,28 @@ describe('vector index acceleration', () => {
     expect(results.error.code).toBe('VECTOR_SEARCH_UNAVAILABLE');
   });
 
+  test('rejects vector rows whose metadata or dimension does not match the index', () => {
+    const database = db();
+    const index = createVectorIndex(database, meta, { driver: fakeDriver() });
+
+    const result = index.upsertVectors([
+      {
+        nodeId: 1,
+        model: meta.modelUri,
+        metadataKey: vectorStorageKey(meta),
+        embedding: new Float32Array([1, 0]),
+      },
+    ]);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? undefined : result.error.code).toBe('VECTOR_METADATA_MISMATCH');
+    expect(database.prepare('SELECT COUNT(*) as count FROM embedding_vectors').get()).toMatchObject(
+      {
+        count: 0,
+      },
+    );
+  });
+
   test('marks the accelerated index dirty when sync/rebuild writes fail but storage succeeds', () => {
     const database = db();
     const index = createVectorIndex(database, meta, {
@@ -179,7 +201,80 @@ describe('vector index acceleration', () => {
 
     expect(write.ok).toBe(true);
     expect(index.vecDirty).toBe(true);
+    expect(index.searchNearest(new Float32Array([1, 0, 0]), 1).ok).toBe(false);
     expect(index.syncVecIndex().ok).toBe(false);
     expect(index.rebuildVecIndex().ok).toBe(false);
+  });
+
+  test('persists dirty acceleration state across fresh index instances', () => {
+    const database = db();
+    const failing = createVectorIndex(database, meta, {
+      driver: fakeDriver({
+        upsert: () => {
+          throw new Error('vec write failed');
+        },
+      }),
+    });
+
+    expect(
+      failing.upsertVectors([
+        {
+          nodeId: 1,
+          model: meta.modelUri,
+          metadataKey: vectorStorageKey(meta),
+          embedding: new Float32Array([1, 0, 0]),
+        },
+      ]).ok,
+    ).toBe(true);
+
+    const fresh = createVectorIndex(database, meta, { driver: fakeDriver() });
+
+    expect(fresh.vecDirty).toBe(true);
+    const result = fresh.searchNearest(new Float32Array([1, 0, 0]), 1);
+    expect(result.ok).toBe(false);
+    expect(result.ok ? undefined : result.error.code).toBe('VECTOR_INDEX_DIRTY');
+  });
+
+  test('rebuild removes stale accelerated rows left from a previous full embed', () => {
+    const database = db();
+    const driver = fakeDriver({
+      rebuild: vi.fn((db, table, rows) => {
+        db.exec(`DELETE FROM ${table}`);
+        const insert = db.prepare(
+          `INSERT OR REPLACE INTO ${table} (node_id, embedding) VALUES (?, ?)`,
+        );
+        for (const row of rows) insert.run(row.nodeId, encodeEmbedding(row.embedding));
+      }),
+    });
+    const index = createVectorIndex(database, meta, { driver });
+    const metadataKey = vectorStorageKey(meta);
+    index.upsertVectors([
+      {
+        nodeId: 1,
+        model: meta.modelUri,
+        metadataKey,
+        embedding: new Float32Array([1, 0, 0]),
+      },
+      {
+        nodeId: 2,
+        model: meta.modelUri,
+        metadataKey,
+        embedding: new Float32Array([0, 1, 0]),
+      },
+    ]);
+
+    database.prepare('DELETE FROM embedding_vectors WHERE metadata_key = ?').run(metadataKey);
+    index.upsertVectors([
+      {
+        nodeId: 1,
+        model: meta.modelUri,
+        metadataKey,
+        embedding: new Float32Array([1, 0, 0]),
+      },
+    ]);
+    expect(index.rebuildVecIndex().ok).toBe(true);
+
+    const results = index.searchNearest(new Float32Array([0, 1, 0]), 10);
+    expect(results.ok && results.value.map((r) => r.nodeId)).toEqual([1]);
   });
 });
