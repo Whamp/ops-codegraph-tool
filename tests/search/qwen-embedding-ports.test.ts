@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   createEmbeddingPort,
   formatEmbeddingDocument,
@@ -17,9 +17,17 @@ import {
 
 function ggufFile(dir: string, name = 'model.gguf'): string {
   const file = path.join(dir, name);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, Buffer.from([0x47, 0x47, 0x55, 0x46, 0, 0]));
   return file;
 }
+
+const originalHome = process.env.HOME;
+const originalNoAutoDownload = process.env.CODEGRAPH_NO_AUTO_DOWNLOAD;
+afterEach(() => {
+  process.env.HOME = originalHome;
+  process.env.CODEGRAPH_NO_AUTO_DOWNLOAD = originalNoAutoDownload;
+});
 
 describe('Qwen embedding compatibility formatting', () => {
   test('formats Qwen queries with instruct-style prompt and keeps documents raw', () => {
@@ -209,6 +217,26 @@ describe('HTTP embedding port', () => {
 });
 
 describe('embedding port factory', () => {
+  test('public embed() without an explicit model reaches the GGUF-capable default path', async () => {
+    vi.resetModules();
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-public-embed-'));
+    process.env.HOME = tmp;
+    process.env.CODEGRAPH_NO_AUTO_DOWNLOAD = '1';
+    try {
+      const { DEFAULT_EMBEDDING_MODEL, embed } = await import('../../src/domain/search/index.js');
+      expect(DEFAULT_EMBEDDING_MODEL).toBe(
+        'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+      );
+
+      await expect(embed(['x'], undefined)).rejects.toThrow(
+        /automatic downloads are disabled|not cached/i,
+      );
+      await expect(embed(['x'], undefined)).rejects.not.toThrow(/Unknown model/i);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   test('creates the built-in GNO compact Qwen embed preset through the GGUF cache path', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-preset-cache-'));
     try {

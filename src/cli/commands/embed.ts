@@ -31,7 +31,7 @@ function resolveEmbedCommandModel(
 
   const legacyModel = config?.embeddings?.model || DEFAULT_MODEL;
   warn(
-    `Embed role resolved to unsupported model "${roleModel}" for the current transformer runtime; using legacy embedding model "${legacyModel}".`,
+    `Embed role resolved to unsupported embedding model "${roleModel}"; using configured embedding model "${legacyModel}" instead.`,
   );
   return legacyModel;
 }

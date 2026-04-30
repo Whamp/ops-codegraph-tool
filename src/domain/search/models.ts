@@ -367,7 +367,7 @@ class TransformerEmbeddingPort implements EmbeddingPort {
       }
     | undefined;
 
-  constructor(private readonly modelKey?: string) {}
+  constructor(private readonly modelKey: string = LEGACY_TRANSFORMER_DEFAULT_MODEL) {}
 
   async embedBatch(texts: string[]): Promise<Float32Array[]> {
     if (!this.loaded) {
@@ -401,7 +401,12 @@ class TransformerEmbeddingPort implements EmbeddingPort {
 }
 
 export function createTransformerEmbeddingPort(modelKey?: string): EmbeddingPort {
-  return new TransformerEmbeddingPort(modelKey);
+  return new TransformerEmbeddingPort(modelKey ?? LEGACY_TRANSFORMER_DEFAULT_MODEL);
+}
+
+async function createDefaultEmbeddingPort(): Promise<EmbeddingPort> {
+  const { createEmbeddingPort } = await import('./embedding-factory.js');
+  return createEmbeddingPort(DEFAULT_MODEL, { inputType: 'raw' });
 }
 
 /**
@@ -411,13 +416,15 @@ export async function embed(
   texts: string[],
   modelKey?: string,
 ): Promise<{ vectors: Float32Array[]; dim: number }> {
-  const config = getModelConfig(modelKey);
+  const config = modelKey ? getModelConfig(modelKey) : getEmbeddingModelConfig(DEFAULT_MODEL);
   const batchSize = getEmbeddingBatchSize(modelKey);
-  const transformerPort = createTransformerEmbeddingPort(modelKey);
+  const basePort = modelKey
+    ? createTransformerEmbeddingPort(modelKey)
+    : await createDefaultEmbeddingPort();
   let embeddedCount = 0;
   const progressPort: EmbeddingPort = {
     async embedBatch(batch) {
-      const vectors = await transformerPort.embedBatch(batch);
+      const vectors = await basePort.embedBatch(batch);
       embeddedCount += batch.length;
       if (texts.length > batchSize) {
         process.stderr.write(
@@ -426,8 +433,8 @@ export async function embed(
       }
       return vectors;
     },
-    reset: () => transformerPort.reset?.(),
+    reset: () => basePort.reset?.(),
   };
   const vectors = await embedWithRecovery(progressPort, texts, { batchSize });
-  return { vectors, dim: config.dim };
+  return { vectors, dim: config.dim || vectors[0]?.length || 0 };
 }
