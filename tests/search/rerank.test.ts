@@ -355,6 +355,41 @@ describe('rerankCandidates', () => {
 
   // ── Text extraction fallback ──────────────────────────────────────
 
+  test('selects full text before content and preview fields', async () => {
+    const candidates = [
+      makeCandidate({
+        key: 'a',
+        text: undefined,
+        full_text: 'full snake text',
+        fullText: 'full camel text',
+        content: 'fts content',
+        text_preview: 'preview snake',
+        textPreview: 'preview camel',
+      } as Partial<RerankCandidate>),
+      makeCandidate({
+        key: 'b',
+        text: undefined,
+        content: 'fts content beats preview',
+        text_preview: 'preview loses',
+      } as Partial<RerankCandidate>),
+    ];
+
+    let passedDocuments: string[] = [];
+    const port: RerankPort = {
+      async rerank(_query: string, documents: string[]) {
+        passedDocuments = documents;
+        return {
+          ok: true as const,
+          value: documents.map((_, index) => ({ index, score: 0.5 })),
+        };
+      },
+    };
+
+    await rerankCandidates(port, 'q', candidates);
+
+    expect(passedDocuments).toEqual(['full snake text', 'fts content beats preview']);
+  });
+
   test('uses name/file/line as fallback text when no text provided', async () => {
     const candidates = [
       makeCandidate({ key: 'a', name: 'myFunc', file: 'src/mod.ts', line: 42, text: undefined }),

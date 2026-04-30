@@ -262,7 +262,7 @@ describe('hybrid search with reranking', () => {
     mocks.ftsSearchData.mockReturnValue({
       results: [
         bm25Result('alpha', 1, { content: 'fts content alpha' }),
-        bm25Result('beta', 0.9, { text_preview: 'preview beta' }),
+        bm25Result('beta', 0.9, { content: 'fts content beta', text_preview: 'preview beta' }),
         bm25Result('gamma', 0.8),
       ],
     });
@@ -287,7 +287,8 @@ describe('hybrid search with reranking', () => {
     });
 
     expect(capturedDocuments).toContain('full text alpha');
-    expect(capturedDocuments).toContain('preview beta');
+    expect(capturedDocuments).toContain('fts content beta');
+    expect(capturedDocuments).not.toContain('preview beta');
     expect(capturedDocuments).toContain('gamma (function) — src/gamma.ts:1');
   });
 

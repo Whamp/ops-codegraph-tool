@@ -86,8 +86,18 @@ export interface RerankCandidate {
   bm25Rank: number | null;
   /** True only for the original/plain lexical BM25 rank-1 hit */
   lexicalExactTopHit?: boolean;
-  /** Best available text for reranking (full_text, preview, or metadata-derived) */
+  /** Explicit text for reranking when callers have already selected the best source. */
   text?: string;
+  /** Full embedded symbol text, preferred over FTS content and previews. */
+  full_text?: string;
+  /** Full embedded symbol text, camelCase variant. */
+  fullText?: string;
+  /** Full FTS content, preferred over previews. */
+  content?: string;
+  /** Short embedded text preview. */
+  text_preview?: string;
+  /** Short embedded text preview, camelCase variant. */
+  textPreview?: string;
 }
 
 export interface RerankedCandidate extends RerankCandidate {
@@ -159,9 +169,16 @@ function normalizeScores(scores: number[]): (score: number) => number {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function candidateText(candidate: RerankCandidate): string {
-  if (candidate.text && candidate.text.trim().length > 0) {
-    return candidate.text;
-  }
+  const candidates = [
+    candidate.full_text,
+    candidate.fullText,
+    candidate.content,
+    candidate.text_preview,
+    candidate.textPreview,
+    candidate.text,
+  ];
+  const selected = candidates.find((text) => typeof text === 'string' && text.trim().length > 0);
+  if (selected) return selected;
   // Fallback: construct text from metadata
   return `${candidate.name} (${candidate.kind}) — ${candidate.file}:${candidate.line}`;
 }

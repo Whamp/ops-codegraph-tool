@@ -233,9 +233,9 @@ function bestRerankText(payload: RankedPayload | undefined): string | undefined 
   const candidates = [
     payload.full_text,
     payload.fullText,
+    payload.content,
     payload.text_preview,
     payload.textPreview,
-    payload.content,
   ];
   return candidates.find((text) => typeof text === 'string' && text.trim().length > 0);
 }
@@ -264,9 +264,9 @@ function bestRerankTextByKey(rankedLists: RankedFusionInput<RankedPayload>[]): M
   for (const field of [
     'full_text',
     'fullText',
+    'content',
     'text_preview',
     'textPreview',
-    'content',
   ] as const) {
     for (const list of rankedLists) {
       for (const result of list.results) {
