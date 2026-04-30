@@ -42,7 +42,21 @@ export const DEFAULTS = {
     apiKey: null as string | null,
     apiKeyCommand: null as string | null,
   },
-  search: { defaultMinScore: 0.2, rrfK: 60, topK: 15, similarityWarnThreshold: 0.85 },
+  search: {
+    defaultMinScore: 0.2,
+    rrfK: 60,
+    topK: 15,
+    similarityWarnThreshold: 0.85,
+    rrfWeights: {
+      bm25: 2,
+      bm25Variant: 0.5,
+      vector: 2,
+      vectorVariant: 0.5,
+      hyde: 0.7,
+    },
+    topRankBonus: 0.1,
+    topRankThreshold: 5,
+  },
   ci: { failOnCycles: false, impactThreshold: null as number | null },
   manifesto: {
     rules: {
