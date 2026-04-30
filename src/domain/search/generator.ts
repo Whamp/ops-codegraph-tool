@@ -5,6 +5,7 @@ import { warn } from '../../infrastructure/logger.js';
 import { DbError } from '../../shared/errors.js';
 import type { BetterSqlite3Database, NodeRow } from '../../types.js';
 import { embed, getModelConfig } from './models.js';
+import { type EmbeddingPort, embedWithRecovery } from './ports.js';
 import { buildSourceText } from './strategies/source.js';
 import { buildStructuredText } from './strategies/structured.js';
 
@@ -49,6 +50,7 @@ function initEmbeddingsSchema(db: BetterSqlite3Database): void {
 
 export interface BuildEmbeddingsOptions {
   strategy?: 'structured' | 'source';
+  embeddingPort?: EmbeddingPort;
 }
 
 /**
@@ -169,7 +171,14 @@ export async function buildEmbeddings(
   }
 
   console.log(`Embedding ${texts.length} symbols...`);
-  const { vectors, dim } = await embed(texts, modelKey);
+  const embedded = options.embeddingPort
+    ? {
+        vectors: await embedWithRecovery(options.embeddingPort, texts),
+        dim: texts.length > 0 ? undefined : config.dim,
+      }
+    : await embed(texts, modelKey);
+  const vectors = embedded.vectors;
+  const dim = embedded.dim ?? vectors[0]?.length ?? config.dim;
 
   const insert = db.prepare(
     'INSERT OR REPLACE INTO embeddings (node_id, vector, text_preview, full_text) VALUES (?, ?, ?, ?)',
@@ -179,7 +188,12 @@ export async function buildEmbeddings(
   const insertAll = db.transaction(() => {
     for (let i = 0; i < vectors.length; i++) {
       const vec = vectors[i] as Float32Array;
-      insert.run(nodeIds[i], Buffer.from(vec.buffer), previews[i], texts[i]);
+      insert.run(
+        nodeIds[i],
+        Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength),
+        previews[i],
+        texts[i],
+      );
       insertFts.run(nodeIds[i], nodeNames[i], texts[i]);
     }
     insertMeta.run('model', config.name);

@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import { info } from '../../infrastructure/logger.js';
 import { ConfigError, EngineError } from '../../shared/errors.js';
 import type { CodegraphConfig } from '../../types.js';
+import { type EmbeddingPort, embedWithRecovery } from './ports.js';
 
 export type ModelRole = 'embed' | 'rerank' | 'expand' | 'gen';
 export type ModelRoleMap = Record<ModelRole, string>;
@@ -331,6 +332,51 @@ async function loadModel(modelKey?: string): Promise<{ extractor: unknown; confi
   return { extractor, config };
 }
 
+class TransformerEmbeddingPort implements EmbeddingPort {
+  private loaded:
+    | {
+        ext: unknown;
+        config: ModelConfig;
+      }
+    | undefined;
+
+  constructor(private readonly modelKey?: string) {}
+
+  async embedBatch(texts: string[]): Promise<Float32Array[]> {
+    if (!this.loaded) {
+      const { extractor: ext, config } = await loadModel(this.modelKey);
+      this.loaded = { ext, config };
+    }
+
+    const { ext, config } = this.loaded;
+    const output =
+      (await // biome-ignore lint/complexity/noBannedTypes: dynamically loaded extractor is untyped
+      (ext as Function)(texts, { pooling: 'mean', normalize: true })) as {
+        data: number[];
+      };
+
+    const vectors: Float32Array[] = [];
+    for (let j = 0; j < texts.length; j++) {
+      const start = j * config.dim;
+      const vec = new Float32Array(config.dim);
+      for (let k = 0; k < config.dim; k++) {
+        vec[k] = output.data[start + k] ?? 0;
+      }
+      vectors.push(vec);
+    }
+    return vectors;
+  }
+
+  async reset(): Promise<void> {
+    this.loaded = undefined;
+    await disposeModel();
+  }
+}
+
+export function createTransformerEmbeddingPort(modelKey?: string): EmbeddingPort {
+  return new TransformerEmbeddingPort(modelKey);
+}
+
 /**
  * Generate embeddings for an array of texts.
  */
@@ -338,33 +384,24 @@ export async function embed(
   texts: string[],
   modelKey?: string,
 ): Promise<{ vectors: Float32Array[]; dim: number }> {
-  const { extractor: ext, config } = await loadModel(modelKey);
-  const dim = config.dim;
-  const results: Float32Array[] = [];
+  const config = getModelConfig(modelKey);
   const batchModelKey = resolveModelKey(modelKey);
   const batchSize = BATCH_SIZE_MAP[batchModelKey] ?? DEFAULT_BATCH_SIZE;
-
-  for (let i = 0; i < texts.length; i += batchSize) {
-    const batch = texts.slice(i, i + batchSize);
-    const output =
-      (await // biome-ignore lint/complexity/noBannedTypes: dynamically loaded extractor is untyped
-      (ext as Function)(batch, { pooling: 'mean', normalize: true })) as {
-        data: number[];
-      };
-
-    for (let j = 0; j < batch.length; j++) {
-      const start = j * dim;
-      const vec = new Float32Array(dim);
-      for (let k = 0; k < dim; k++) {
-        vec[k] = output.data[start + k] ?? 0;
+  const transformerPort = createTransformerEmbeddingPort(modelKey);
+  let embeddedCount = 0;
+  const progressPort: EmbeddingPort = {
+    async embedBatch(batch) {
+      const vectors = await transformerPort.embedBatch(batch);
+      embeddedCount += batch.length;
+      if (texts.length > batchSize) {
+        process.stderr.write(
+          `  Embedded ${Math.min(embeddedCount, texts.length)}/${texts.length}\r`,
+        );
       }
-      results.push(vec);
-    }
-
-    if (texts.length > batchSize) {
-      process.stderr.write(`  Embedded ${Math.min(i + batchSize, texts.length)}/${texts.length}\r`);
-    }
-  }
-
-  return { vectors: results, dim };
+      return vectors;
+    },
+    reset: () => transformerPort.reset?.(),
+  };
+  const vectors = await embedWithRecovery(progressPort, texts, { batchSize });
+  return { vectors, dim: config.dim };
 }
