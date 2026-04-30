@@ -30,7 +30,7 @@ export interface SemanticSearchOpts {
   rerank?: boolean;
   /** Override the number of fused candidates eligible for reranking. */
   rerankCandidates?: number;
-  /** Injected rerank port for cross-encoder reranking (default-off unless provided + config enabled) */
+  /** Optional injected rerank port for tests/custom cross-encoder reranking. */
   rerankPort?: import('./rerank.js').RerankPort;
 }
 

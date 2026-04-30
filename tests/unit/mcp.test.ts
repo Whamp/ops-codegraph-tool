@@ -172,6 +172,16 @@ describe('TOOLS', () => {
       { type: 'array', items: { type: 'string' } },
     ]);
     expect(ss.inputSchema.properties).toHaveProperty('query_modes');
+    expect(ss.inputSchema.properties.query_modes.items.oneOf).toEqual([
+      { type: 'string' },
+      {
+        type: 'object',
+        properties: {
+          mode: { type: 'string', enum: ['term', 'intent', 'hyde'] },
+          text: { type: 'string' },
+        },
+      },
+    ]);
     expect(ss.inputSchema.properties).toHaveProperty('explain');
   });
 

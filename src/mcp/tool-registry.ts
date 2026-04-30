@@ -340,13 +340,18 @@ const BASE_TOOLS: ToolSchema[] = [
         query_modes: {
           type: 'array',
           items: {
-            type: 'object',
-            properties: {
-              mode: { type: 'string', enum: ['term', 'intent', 'hyde'] },
-              text: { type: 'string' },
-            },
+            oneOf: [
+              { type: 'string' },
+              {
+                type: 'object',
+                properties: {
+                  mode: { type: 'string', enum: ['term', 'intent', 'hyde'] },
+                  text: { type: 'string' },
+                },
+              },
+            ],
           },
-          description: 'Structured query mode objects for agents',
+          description: 'Structured query mode entries for agents: strings or {mode,text} objects',
         },
         explain: {
           type: 'boolean',
