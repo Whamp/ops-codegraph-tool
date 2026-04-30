@@ -94,22 +94,35 @@ Re-embed after:
 
 ### Clearing stale vectors
 
-The normal recovery path is to re-run embedding with the desired model and strategy:
+The normal recovery path is to build first, then re-run embedding with the desired model and strategy:
 
 ```bash
+codegraph build
 codegraph embed --model <model-or-uri> --strategy structured
 ```
 
 This refreshes the primary `embeddings`, `embedding_meta`, and FTS rows and replaces vectors for the active model/profile storage key.
 
-If you want to remove all vector generations and rebuild from a clean slate, use a SQLite backup first, then clear the embedding tables:
+For a full clean slate, back up or remove the database and rebuild it:
 
 ```bash
 cp .codegraph/graph.db .codegraph/graph.db.bak
-sqlite3 .codegraph/graph.db \
-  "DELETE FROM embeddings; DELETE FROM embedding_meta; DELETE FROM fts_index; DELETE FROM embedding_vectors; DELETE FROM embedding_vector_index_meta;"
+rm .codegraph/graph.db
+codegraph build
 codegraph embed --model <model-or-uri> --strategy structured
 ```
+
+If you must preserve the graph tables and only clear search/vector state, use `DROP TABLE IF EXISTS` so older databases without newer tables are handled safely:
+
+```sql
+DROP TABLE IF EXISTS embeddings;
+DROP TABLE IF EXISTS embedding_meta;
+DROP TABLE IF EXISTS fts_index;
+DROP TABLE IF EXISTS embedding_vectors;
+DROP TABLE IF EXISTS embedding_vector_index_meta;
+```
+
+When sqlite-vec acceleration has been used, also inspect `sqlite_master` for virtual tables named `vec_embeddings_*` and drop each stale table with `DROP TABLE IF EXISTS` before re-running `codegraph embed`.
 
 If results still appear stale after large graph changes, rebuild the graph and then re-embed:
 
@@ -285,4 +298,4 @@ Codegraph's model-role architecture and retrieval workflow adapt design and code
 
 GNO source reference: https://github.com/gmickel/gno.
 
-GNO is MIT licensed: MIT License, Copyright (c) 2025 Gordon Mickel.
+GNO license: https://github.com/gmickel/gno/blob/main/LICENSE — MIT License, Copyright (c) 2025 Gordon Mickel.
