@@ -2,6 +2,10 @@ import { execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { info } from '../../infrastructure/logger.js';
 import { ConfigError, EngineError } from '../../shared/errors.js';
+import type { CodegraphConfig } from '../../types.js';
+
+export type ModelRole = 'embed' | 'rerank' | 'expand' | 'gen';
+export type ModelRoleMap = Record<ModelRole, string>;
 
 export interface ModelConfig {
   name: string;
@@ -74,6 +78,62 @@ export const MODELS: Record<string, ModelConfig> = {
 export const EMBEDDING_STRATEGIES: readonly string[] = ['structured', 'source'];
 
 export const DEFAULT_MODEL: string = 'nomic-v1.5';
+export const DEFAULT_RETRIEVAL_PRESET = 'codegraph-default';
+
+export interface RetrievalModelPreset {
+  name: string;
+  desc: string;
+  roles: ModelRoleMap;
+}
+
+export interface ResolvedRetrievalModels {
+  preset: string;
+  requestedPreset?: string;
+  roles: ModelRoleMap;
+}
+
+export const RETRIEVAL_MODEL_PRESETS: Record<string, RetrievalModelPreset> = {
+  [DEFAULT_RETRIEVAL_PRESET]: {
+    name: DEFAULT_RETRIEVAL_PRESET,
+    desc: 'Compatibility default: current Codegraph embedding model plus GNO-inspired retrieval roles.',
+    roles: {
+      embed: MODELS[DEFAULT_MODEL]!.name,
+      rerank: 'hf:Qwen/Qwen3-Reranker-0.6B-GGUF',
+      expand: 'hf:Qwen/Qwen2.5-0.5B-Instruct-GGUF',
+      gen: 'hf:Qwen/Qwen2.5-1.5B-Instruct-GGUF',
+    },
+  },
+  'gno-compact': {
+    name: 'gno-compact',
+    desc: 'Compact GNO-inspired local retrieval model roles.',
+    roles: {
+      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF',
+      rerank: 'hf:Qwen/Qwen3-Reranker-0.6B-GGUF',
+      expand: 'hf:Qwen/Qwen2.5-0.5B-Instruct-GGUF',
+      gen: 'hf:Qwen/Qwen2.5-1.5B-Instruct-GGUF',
+    },
+  },
+  'gno-balanced': {
+    name: 'gno-balanced',
+    desc: 'Balanced GNO-inspired retrieval model roles.',
+    roles: {
+      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF',
+      rerank: 'hf:Qwen/Qwen3-Reranker-0.6B-GGUF',
+      expand: 'hf:Qwen/Qwen2.5-1.5B-Instruct-GGUF',
+      gen: 'hf:Qwen/Qwen2.5-3B-Instruct-GGUF',
+    },
+  },
+  'gno-quality': {
+    name: 'gno-quality',
+    desc: 'Quality-oriented GNO-inspired retrieval model roles.',
+    roles: {
+      embed: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF',
+      rerank: 'hf:Qwen/Qwen3-Reranker-0.6B-GGUF',
+      expand: 'hf:Qwen/Qwen2.5-3B-Instruct-GGUF',
+      gen: 'hf:Qwen/Qwen2.5-7B-Instruct-GGUF',
+    },
+  },
+};
 const NPM_BIN = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const BATCH_SIZE_MAP: Record<string, number> = {
   minilm: 32,
@@ -86,14 +146,60 @@ const BATCH_SIZE_MAP: Record<string, number> = {
 };
 const DEFAULT_BATCH_SIZE = 32;
 
+export function resolveModelKey(modelKeyOrUri?: string): string {
+  const requested = modelKeyOrUri || DEFAULT_MODEL;
+  if (MODELS[requested]) return requested;
+  const entry = Object.entries(MODELS).find(([, config]) => config.name === requested);
+  if (entry) return entry[0];
+  return requested;
+}
+
 /** @internal Used by generator.js — not part of the public barrel. */
 export function getModelConfig(modelKey?: string): ModelConfig {
-  const key = modelKey || DEFAULT_MODEL;
+  const key = resolveModelKey(modelKey);
   const config = MODELS[key];
   if (!config) {
     throw new ConfigError(`Unknown model: ${key}. Available: ${Object.keys(MODELS).join(', ')}`);
   }
   return config;
+}
+
+function resolveLegacyEmbeddingUri(config?: CodegraphConfig): string | undefined {
+  const legacyModel = config?.embeddings?.model;
+  if (!legacyModel) return undefined;
+  const key = resolveModelKey(legacyModel);
+  return MODELS[key]?.name ?? legacyModel;
+}
+
+export function resolveRetrievalModels(config?: CodegraphConfig): ResolvedRetrievalModels {
+  const requestedPreset = config?.models?.preset || DEFAULT_RETRIEVAL_PRESET;
+  const preset =
+    RETRIEVAL_MODEL_PRESETS[requestedPreset] ?? RETRIEVAL_MODEL_PRESETS[DEFAULT_RETRIEVAL_PRESET]!;
+  const roles: ModelRoleMap = { ...preset.roles };
+  const overrides = config?.models?.roles;
+
+  const legacyEmbed = resolveLegacyEmbeddingUri(config);
+  const hasEmbedOverride = overrides?.embed != null;
+  if (legacyEmbed && !hasEmbedOverride) {
+    roles.embed = legacyEmbed;
+  }
+
+  if (overrides) {
+    for (const role of ['embed', 'rerank', 'expand', 'gen'] as const) {
+      const uri = overrides[role];
+      if (uri) roles[role] = uri;
+    }
+  }
+
+  return {
+    preset: preset.name,
+    requestedPreset: requestedPreset === preset.name ? undefined : requestedPreset,
+    roles,
+  };
+}
+
+export function resolveModelRoleUri(config: CodegraphConfig | undefined, role: ModelRole): string {
+  return resolveRetrievalModels(config).roles[role];
 }
 
 /**
@@ -233,7 +339,8 @@ export async function embed(
   const { extractor: ext, config } = await loadModel(modelKey);
   const dim = config.dim;
   const results: Float32Array[] = [];
-  const batchSize = BATCH_SIZE_MAP[modelKey || DEFAULT_MODEL] ?? DEFAULT_BATCH_SIZE;
+  const batchModelKey = resolveModelKey(modelKey);
+  const batchSize = BATCH_SIZE_MAP[batchModelKey] ?? DEFAULT_BATCH_SIZE;
 
   for (let i = 0; i < texts.length; i += batchSize) {
     const batch = texts.slice(i, i + batchSize);

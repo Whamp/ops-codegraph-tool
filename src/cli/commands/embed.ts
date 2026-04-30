@@ -1,5 +1,9 @@
 import path from 'node:path';
-import { buildEmbeddings, DEFAULT_MODEL, EMBEDDING_STRATEGIES } from '../../domain/search/index.js';
+import {
+  buildEmbeddings,
+  EMBEDDING_STRATEGIES,
+  resolveModelRoleUri,
+} from '../../domain/search/index.js';
 import type { CommandDefinition } from '../types.js';
 
 export const command: CommandDefinition = {
@@ -25,8 +29,7 @@ export const command: CommandDefinition = {
   },
   async execute([dir], opts, ctx) {
     const root = path.resolve(dir || '.');
-    const embeddingsConfig = ctx.config.embeddings;
-    const model = (opts.model as string) || (embeddingsConfig?.model as string) || DEFAULT_MODEL;
+    const model = (opts.model as string) || resolveModelRoleUri(ctx.config, 'embed');
     await buildEmbeddings(root, model, opts.db as string | undefined, { strategy: opts.strategy });
   },
 };

@@ -1,5 +1,5 @@
 import { collectFile } from '../../db/query-builder.js';
-import { search } from '../../domain/search/index.js';
+import { resolveModelRoleUri, search } from '../../domain/search/index.js';
 import type { CommandDefinition } from '../types.js';
 
 export const command: CommandDefinition = {
@@ -34,7 +34,7 @@ export const command: CommandDefinition = {
       limit: parseInt(opts.limit as string, 10),
       noTests: ctx.resolveNoTests(opts),
       minScore: parseFloat(opts.minScore as string),
-      model: opts.model as string | undefined,
+      model: (opts.model as string | undefined) || resolveModelRoleUri(ctx.config, 'embed'),
       kind: opts.kind as string | undefined,
       filePattern,
       rrfK: parseInt(opts.rrfK as string, 10),
