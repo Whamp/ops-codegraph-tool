@@ -35,6 +35,7 @@ export {
   disposeModel,
   EMBEDDING_STRATEGIES,
   embed,
+  getEmbeddingBatchSize,
   MODELS,
   RETRIEVAL_MODEL_PRESETS,
   resolveModelKey,

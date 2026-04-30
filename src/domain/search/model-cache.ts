@@ -154,14 +154,19 @@ export class ModelCache {
 
     const cached = await this.getCachedPath(uri);
     if (cached) return cached;
+    const localFile = await this.findLocalCachedPath(parsed, uri);
+    if (localFile) {
+      await this.addToManifest(uri, type, localFile);
+      return localFile;
+    }
     if (policy.offline) {
       throw new EngineError(
-        `Model ${uri} is not cached and offline mode is enabled. Disable CODEGRAPH_OFFLINE/HF_HUB_OFFLINE or pre-download the model into ${this.dir}.`,
+        `Model ${uri} is not cached and offline mode is enabled. Add a Codegraph cache manifest entry at ${this.manifestPath}, place the GGUF file under ${this.dir}/<org>/<repo>/<file>, or disable CODEGRAPH_OFFLINE/HF_HUB_OFFLINE.`,
       );
     }
     if (!policy.allowDownload) {
       throw new EngineError(
-        `Model ${uri} is not cached and automatic downloads are disabled. Set CODEGRAPH_NO_AUTO_DOWNLOAD=0 or pre-download the model into ${this.dir}.`,
+        `Model ${uri} is not cached and automatic downloads are disabled. Add a Codegraph cache manifest entry at ${this.manifestPath}, place the GGUF file under ${this.dir}/<org>/<repo>/<file>, or set CODEGRAPH_NO_AUTO_DOWNLOAD=0.`,
       );
     }
 
@@ -202,6 +207,24 @@ export class ModelCache {
       await this.removeFromManifest(uri);
       return null;
     }
+  }
+
+  private async findLocalCachedPath(parsed: ParsedModelUri, uri: string): Promise<string | null> {
+    if (parsed.scheme !== 'hf' || parsed.quantization || !parsed.file) return null;
+    const candidates = [
+      path.join(this.dir, parsed.org, parsed.repo, parsed.file),
+      path.join(this.dir, parsed.repo, parsed.file),
+      path.join(this.dir, parsed.file),
+    ];
+    for (const candidate of candidates) {
+      try {
+        await validateGgufFile(candidate, uri);
+        return candidate;
+      } catch {
+        // Continue looking for deterministic local cache layouts before reporting a miss.
+      }
+    }
+    return null;
   }
 
   private async loadManifest(): Promise<Manifest> {

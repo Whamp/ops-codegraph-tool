@@ -69,13 +69,16 @@ describe('embed command model compatibility', () => {
   test('preserves explicit Qwen --model for the port factory', async () => {
     await command.execute?.(
       ['.'],
-      { strategy: 'structured', model: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF' },
+      {
+        strategy: 'structured',
+        model: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
+      },
       ctx({ models: { preset: 'gno-compact' } }),
     );
 
     expect(buildEmbeddingsMock).toHaveBeenCalledWith(
       expect.any(String),
-      'hf:Qwen/Qwen3-Embedding-0.6B-GGUF',
+      'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
       undefined,
       { strategy: 'structured' },
     );

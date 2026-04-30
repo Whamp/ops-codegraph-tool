@@ -6,7 +6,7 @@ import { DbError } from '../../shared/errors.js';
 import type { BetterSqlite3Database, NodeRow } from '../../types.js';
 import { formatEmbeddingDocument } from './compatibility.js';
 import { createEmbeddingPort } from './embedding-factory.js';
-import { getEmbeddingModelConfig } from './models.js';
+import { getEmbeddingBatchSize, getEmbeddingModelConfig } from './models.js';
 import { type EmbeddingPort, embedWithRecovery } from './ports.js';
 import { buildSourceText } from './strategies/source.js';
 import { buildStructuredText } from './strategies/structured.js';
@@ -175,15 +175,11 @@ export async function buildEmbeddings(
   console.log(`Embedding ${texts.length} symbols...`);
   const embeddingPort =
     options.embeddingPort ?? (await createEmbeddingPort(modelKey, { inputType: 'raw' }));
-  const embedded = options.embeddingPort
-    ? {
-        vectors: await embedWithRecovery(embeddingPort, texts),
-        dim: texts.length > 0 ? undefined : config.dim,
-      }
-    : {
-        vectors: await embedWithRecovery(embeddingPort, texts),
-        dim: texts.length > 0 ? undefined : config.dim,
-      };
+  const batchSize = getEmbeddingBatchSize(modelKey);
+  const embedded = {
+    vectors: await embedWithRecovery(embeddingPort, texts, { batchSize }),
+    dim: texts.length > 0 ? undefined : config.dim,
+  };
   const vectors = embedded.vectors;
   const dim = embedded.dim ?? vectors[0]?.length ?? config.dim;
 

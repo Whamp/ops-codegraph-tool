@@ -9,7 +9,9 @@ import {
   HttpEmbeddingPort,
   ModelCache,
   parseModelUri,
+  RETRIEVAL_MODEL_PRESETS,
   resolveDownloadPolicy,
+  resolveModelRoleUri,
   validateGgufFile,
 } from '../../src/domain/search/index.js';
 
@@ -37,6 +39,16 @@ describe('Qwen embedding compatibility formatting', () => {
 });
 
 describe('model URI parsing, GGUF validation, and download policy', () => {
+  test('built-in GNO-inspired preset role URIs use explicit GGUF filenames', () => {
+    for (const presetName of ['gno-compact', 'gno-balanced', 'gno-quality'] as const) {
+      const preset = RETRIEVAL_MODEL_PRESETS[presetName]!;
+      for (const uri of Object.values(preset.roles)) {
+        expect(uri).toMatch(/^hf:.+\.gguf$/);
+        expect(parseModelUri(uri)).toMatchObject({ scheme: 'hf' });
+      }
+    }
+  });
+
   test('parses hf explicit GGUF, hf quant shorthand, file URLs, and absolute paths', () => {
     expect(parseModelUri('hf:Qwen/Qwen3-Embedding-0.6B-GGUF/model.gguf')).toEqual({
       scheme: 'hf',
@@ -79,13 +91,29 @@ describe('model URI parsing, GGUF validation, and download policy', () => {
           offline: true,
           allowDownload: false,
         }),
-      ).rejects.toThrow(/offline mode/i);
+      ).rejects.toThrow(/offline mode.*manifest/i);
       await expect(
         cache.ensureModel('hf:Qwen/Qwen3-Embedding-0.6B-GGUF/model.gguf', 'embed', {
           offline: false,
           allowDownload: false,
         }),
-      ).rejects.toThrow(/automatic downloads are disabled/i);
+      ).rejects.toThrow(/automatic downloads are disabled.*manifest/i);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('discovers explicit HuggingFace GGUF files in the cache directory without a manifest', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-cache-local-'));
+    try {
+      const uri = 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/model.gguf';
+      const file = path.join(tmp, 'Qwen', 'Qwen3-Embedding-0.6B-GGUF', 'model.gguf');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, Buffer.from([0x47, 0x47, 0x55, 0x46, 0, 0]));
+
+      await expect(
+        new ModelCache(tmp).ensureModel(uri, 'embed', { offline: true, allowDownload: false }),
+      ).resolves.toBe(file);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -137,6 +165,43 @@ describe('HTTP embedding port', () => {
 });
 
 describe('embedding port factory', () => {
+  test('creates the built-in GNO compact Qwen embed preset through the GGUF cache path', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-preset-cache-'));
+    try {
+      const uri = resolveModelRoleUri({ models: { preset: 'gno-compact' } }, 'embed');
+      expect(uri).toBe('hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf');
+      expect(uri).toBe(RETRIEVAL_MODEL_PRESETS['gno-compact']!.roles.embed);
+
+      const file = ggufFile(tmp, 'Qwen3-Embedding-0.6B-Q8_0.gguf');
+      fs.writeFileSync(
+        path.join(tmp, 'manifest.json'),
+        JSON.stringify({
+          version: '1.0',
+          models: [{ uri, type: 'embed', path: file, cachedAt: new Date().toISOString() }],
+        }),
+      );
+      const runtimeLoader = vi.fn(async () => ({
+        getLlama: async () => ({
+          loadModel: async () => ({
+            createEmbeddingContext: async () => ({
+              getEmbeddingFor: async () => ({ vector: [3, 4] }),
+            }),
+          }),
+        }),
+      }));
+
+      const port = await createEmbeddingPort(uri, {
+        cacheDir: tmp,
+        inputType: 'document',
+        runtimeLoader,
+      });
+      const [vector] = await port.embedBatch(['function route() {}']);
+      expect(Array.from(vector!)).toEqual([3, 4]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   test('creates Qwen GGUF port from local file without requiring node-llama-cpp until used', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-factory-'));
     try {
