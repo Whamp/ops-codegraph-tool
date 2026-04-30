@@ -178,6 +178,8 @@ beforeAll(() => {
   QUERY_VECTORS.set('"formatDate"', makeVec([0, 0, 1]));
   QUERY_VECTORS.set('buildGraph', makeVec([0.2, 0.2, 0.2]));
   QUERY_VECTORS.set('"buildGraph"', makeVec([0.2, 0.2, 0.2]));
+  QUERY_VECTORS.set('auth jwt validate', makeVec([0, 1, 0]));
+  QUERY_VECTORS.set('auth formatDate docs format', makeVec([0, 0, 1]));
 
   // ─── Second DB without FTS5 (for fallback tests) ────────────────────
   noFtsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-nofts-'));
@@ -465,6 +467,43 @@ describe('hybridSearchData', () => {
     const data = await hybridSearchData('auth ; jwt', dbPath, { minScore: 0.01 });
     expect(data).not.toBeNull();
     expect(data.results.length).toBeGreaterThan(0);
+  });
+
+  test('optional expansion routes lexical variants to BM25 and vector/HyDE variants to semantic', async () => {
+    const data = await hybridSearchData('auth', dbPath, {
+      minScore: 0.01,
+      expand: true,
+      expansionProvider: {
+        generate: async () =>
+          '{"lexicalQueries":["auth authenticate"],"vectorQueries":["auth jwt validate"],"hyde":"auth formatDate docs format"}',
+      },
+    });
+
+    expect(data).not.toBeNull();
+    expect(data.results.map((result) => result.name)).toEqual(
+      expect.arrayContaining(['authenticate', 'validateJWT', 'formatDate']),
+    );
+    expect(data.results.find((result) => result.name === 'authenticate')?.bm25Rank).not.toBeNull();
+    expect(
+      data.results.find((result) => result.name === 'validateJWT')?.semanticRank,
+    ).not.toBeNull();
+    expect(
+      data.results.find((result) => result.name === 'formatDate')?.semanticRank,
+    ).not.toBeNull();
+  });
+
+  test('strong exact BM25 signal skips expansion in hybrid search', async () => {
+    const data = await hybridSearchData('authenticate', dbPath, {
+      minScore: 0.01,
+      expand: true,
+      expansionProvider: {
+        generate: async () =>
+          '{"lexicalQueries":["format"],"vectorQueries":["formatDate docs format"],"hyde":"formatDate docs format"}',
+      },
+    });
+
+    expect(data).not.toBeNull();
+    expect(data.results.some((result) => result.name === 'formatDate')).toBe(false);
   });
 });
 

@@ -54,6 +54,14 @@ export {
 export type { EmbeddingPort, EmbeddingRecoveryOptions } from './ports.js';
 export { embedWithRecovery } from './ports.js';
 export { search } from './search/cli-formatter.js';
+export type { ExpansionProvider, ExpansionResult } from './search/expansion.js';
+export {
+  applyExpansionGuardrails,
+  buildExpansionPrompt,
+  expandOrFallback,
+  parseExpansionOutput,
+  routeExpandedQueries,
+} from './search/expansion.js';
 export { hybridSearchData } from './search/hybrid.js';
 export { ftsSearchData } from './search/keyword.js';
 export { multiSearchData, searchData } from './search/semantic.js';

@@ -16,6 +16,8 @@ export const command: CommandDefinition = {
     ['--file <pattern>', 'Filter by file path pattern (repeatable)', collectFile],
     ['--rrf-k <number>', 'RRF k parameter for multi-query ranking', '60'],
     ['--mode <mode>', 'Search mode: hybrid, semantic, keyword (default: hybrid)'],
+    ['--expand', 'Enable query expansion for hybrid search'],
+    ['--no-expand', 'Disable query expansion for hybrid search'],
     ['-j, --json', 'Output as JSON'],
     ['--offset <number>', 'Skip N results (default: 0)'],
     ['--ndjson', 'Newline-delimited JSON output'],
@@ -39,6 +41,7 @@ export const command: CommandDefinition = {
       filePattern,
       rrfK: parseInt(opts.rrfK as string, 10),
       mode: opts.mode as 'hybrid' | 'semantic' | 'keyword' | undefined,
+      expand: opts.expand as boolean | undefined,
       json: opts.json as boolean | undefined,
     });
   },
