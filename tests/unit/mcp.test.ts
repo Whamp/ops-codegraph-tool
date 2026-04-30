@@ -180,6 +180,7 @@ describe('TOOLS', () => {
           mode: { type: 'string', enum: ['term', 'intent', 'hyde'] },
           text: { type: 'string' },
         },
+        required: ['mode', 'text'],
       },
     ]);
     expect(ss.inputSchema.properties).toHaveProperty('explain');

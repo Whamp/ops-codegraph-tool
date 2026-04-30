@@ -348,6 +348,7 @@ const BASE_TOOLS: ToolSchema[] = [
                   mode: { type: 'string', enum: ['term', 'intent', 'hyde'] },
                   text: { type: 'string' },
                 },
+                required: ['mode', 'text'],
               },
             ],
           },
