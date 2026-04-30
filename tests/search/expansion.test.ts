@@ -118,6 +118,39 @@ describe('query expansion parsing and guardrails', () => {
     expect(guarded.hyde).toBeUndefined();
   });
 
+  test('does not treat quoted negations as positive quoted phrase anchors', () => {
+    const guarded = applyExpansionGuardrails('AuthService -"legacy code" migration', {
+      lexicalQueries: ['AuthService -"legacy code" migration plan'],
+      vectorQueries: ['AuthService -"legacy code" migration details'],
+    });
+
+    expect(guarded.lexicalQueries).toContain('AuthService -"legacy code"');
+    expect(guarded.lexicalQueries).not.toContain('AuthService "legacy code" -"legacy code"');
+    expect(guarded.lexicalQueries).toContain('AuthService -"legacy code" migration plan');
+    expect(guarded.vectorQueries).toEqual(['AuthService -"legacy code" migration details']);
+  });
+
+  test('rejects positive reintroduction of quoted negation phrases', () => {
+    const guarded = applyExpansionGuardrails('AuthService -"legacy code" migration', {
+      lexicalQueries: [
+        'AuthService -"legacy code" "legacy code" migration',
+        'AuthService -"legacy code" migration',
+      ],
+      vectorQueries: [
+        'AuthService -"legacy code" discusses legacy code migration',
+        'AuthService -"legacy code" migration guide',
+      ],
+      hyde: 'AuthService -"legacy code" migration warns about legacy code paths.',
+    });
+
+    expect(guarded.lexicalQueries).not.toContain(
+      'AuthService -"legacy code" "legacy code" migration',
+    );
+    expect(guarded.lexicalQueries).toContain('AuthService -"legacy code" migration');
+    expect(guarded.vectorQueries).toEqual(['AuthService -"legacy code" migration guide']);
+    expect(guarded.hyde).toBeUndefined();
+  });
+
   test('returns null on invalid output and falls back on provider failure or timeout', async () => {
     expect(parseExpansionOutput('not json', 'auth')).toBeNull();
 

@@ -97,16 +97,31 @@ function extractOverlapTokens(text: string): Set<string> {
   );
 }
 
+function stripNegationSpans(query: string): string {
+  return query.replace(NEGATION_PATTERN, ' ');
+}
+
 function stripAnchorSpans(query: string): string {
-  return query.replace(QUOTED_PHRASE_PATTERN, ' ').replace(NEGATION_PATTERN, ' ');
+  return stripNegationSpans(query).replace(QUOTED_PHRASE_PATTERN, ' ');
 }
 
 function extractQuerySignals(query: string): QuerySignals {
+  const negationMatches = [...query.matchAll(NEGATION_PATTERN)];
+  const negationSpans = negationMatches.map((match) => ({
+    start: match.index ?? 0,
+    end: (match.index ?? 0) + match[0].length,
+  }));
   const quotedPhrases = dedupeStrings(
-    [...query.matchAll(QUOTED_PHRASE_PATTERN)].map((match) => match[1]?.trim() ?? ''),
+    [...query.matchAll(QUOTED_PHRASE_PATTERN)]
+      .filter((match) => {
+        const start = match.index ?? 0;
+        const end = start + match[0].length;
+        return !negationSpans.some((span) => start >= span.start && end <= span.end);
+      })
+      .map((match) => match[1]?.trim() ?? ''),
   );
   const negations = dedupeStrings(
-    [...query.matchAll(NEGATION_PATTERN)].map((match) => {
+    negationMatches.map((match) => {
       const phrase = match[2]?.trim();
       if (phrase) return `-"${phrase}"`;
       const token = match[3]?.trim();
@@ -147,7 +162,7 @@ function hasPositiveNegatedValue(candidate: string, negation: string): boolean {
 }
 
 function contradictsNegation(signals: QuerySignals, candidate: string): boolean {
-  const candidateWithoutNegations = stripAnchorSpans(candidate);
+  const candidateWithoutNegations = stripNegationSpans(candidate);
   return signals.negations.some((negation) =>
     hasPositiveNegatedValue(candidateWithoutNegations, negation),
   );
