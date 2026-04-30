@@ -9,6 +9,7 @@ export interface WeightedRrfConfig {
   weights: FusionWeights;
   topRankBonus: number;
   topRankThreshold: number;
+  nearTopRankBonusMultiplier: number;
 }
 
 export interface RankedFusionResult<TPayload = unknown> {
@@ -132,7 +133,7 @@ export function weightedRrfFuse<TPayload = unknown>(
     if (ranks.some((rank) => rank === 1)) {
       candidate.topRankBonus = config.topRankBonus;
     } else if (ranks.some((rank) => rank <= config.topRankThreshold)) {
-      candidate.topRankBonus = config.topRankBonus * 0.4;
+      candidate.topRankBonus = config.topRankBonus * config.nearTopRankBonusMultiplier;
     }
     candidate.score += candidate.topRankBonus;
   }

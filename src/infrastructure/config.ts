@@ -56,6 +56,7 @@ export const DEFAULTS = {
     },
     topRankBonus: 0.1,
     topRankThreshold: 5,
+    nearTopRankBonusMultiplier: 0.4,
   },
   ci: { failOnCycles: false, impactThreshold: null as number | null },
   manifesto: {

@@ -1153,6 +1153,7 @@ export interface CodegraphConfig {
     };
     topRankBonus?: number;
     topRankThreshold?: number;
+    nearTopRankBonusMultiplier?: number;
   };
 
   ci: {

@@ -10,6 +10,7 @@ vi.mock('../../src/db/index.js', () => ({
 }));
 
 vi.mock('../../src/infrastructure/config.js', () => ({
+  DEFAULTS: { search: { nearTopRankBonusMultiplier: 0.4 } },
   loadConfig: () => ({ search: { topK: 1, rrfK: 60 } }),
 }));
 

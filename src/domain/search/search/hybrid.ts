@@ -1,5 +1,5 @@
 import { openReadonlyOrFail } from '../../../db/index.js';
-import { loadConfig } from '../../../infrastructure/config.js';
+import { DEFAULTS, loadConfig } from '../../../infrastructure/config.js';
 import type { BetterSqlite3Database, CodegraphConfig } from '../../../types.js';
 import { hasFtsIndex } from '../stores/fts5.js';
 import { routeExpandedQueries } from './expansion.js';
@@ -216,6 +216,8 @@ function fuseResults(
     weights: weightsFromConfig(config),
     topRankBonus: config.topRankBonus ?? 0,
     topRankThreshold: config.topRankThreshold ?? 0,
+    nearTopRankBonusMultiplier:
+      config.nearTopRankBonusMultiplier ?? DEFAULTS.search.nearTopRankBonusMultiplier,
   });
   const metrics = metricsFromRankedLists(rankedLists);
 

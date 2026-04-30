@@ -10,6 +10,7 @@ vi.mock('../../src/db/index.js', () => ({
 }));
 
 vi.mock('../../src/infrastructure/config.js', () => ({
+  DEFAULTS: { search: { nearTopRankBonusMultiplier: 0.4 } },
   loadConfig: () => ({
     search: {
       topK: 2,
@@ -17,6 +18,7 @@ vi.mock('../../src/infrastructure/config.js', () => ({
       rrfWeights: { bm25: 2, bm25Variant: 0.5, vector: 2, vectorVariant: 0.5, hyde: 0.7 },
       topRankBonus: 0,
       topRankThreshold: 3,
+      nearTopRankBonusMultiplier: 0.4,
     },
   }),
 }));
