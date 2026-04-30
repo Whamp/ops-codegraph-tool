@@ -11,7 +11,7 @@ codegraph build
 codegraph embed                         # uses config/default embedding model and structured symbol text
 codegraph search "handle auth"          # hybrid BM25 + semantic search
 codegraph search "parseConfig" --mode keyword
-codegraph search "auth flow" --expand --explain
+codegraph search "auth" --query-mode term:auth --query-mode intent:"validate bearer token"
 ```
 
 Re-run `codegraph embed` whenever you change the embedding model, embedding strategy, compatibility profile, or after a full graph rebuild that makes stored embeddings stale.
@@ -183,7 +183,7 @@ Transformer models are loaded through `@huggingface/transformers`; that runtime 
 - `@huggingface/transformers` is optional and lazy-loaded for transformer embeddings. If missing, Codegraph prompts in TTY sessions or attempts non-interactive install; otherwise it tells you to install it.
 - `node-llama-cpp` is optional and only needed for GGUF models.
 - `sqlite-vec` support is optional. When vector acceleration is unavailable, Codegraph stores vectors in SQLite and semantic search falls back to brute-force vector comparison.
-- Reranking is optional. If no supported rerank port is available or reranking fails, hybrid search falls back to fusion-only results.
+- Reranking is optional. Without a supported HTTP rerank endpoint, hybrid search skips reranking. If a configured rerank endpoint fails, hybrid search falls back to fusion-only results.
 
 ## Expansion, structured query modes, fusion, and reranking
 
@@ -214,12 +214,12 @@ CLI controls:
 
 ```bash
 codegraph search "auth flow" --mode hybrid
-codegraph search "auth flow" --expand
+codegraph search "auth flow" --expand   # Allows model expansion only when a provider is wired
 codegraph search "auth flow" --no-expand
 codegraph search "auth flow" --rrf-k 30
 codegraph search "auth flow" --explain --json
 codegraph search "parseConfig" --query-mode term:parseConfig
-codegraph search "auth" --query-mode intent:"validate bearer token" --query-mode hyde:"Middleware validates a bearer token before calling the handler."
+codegraph search "auth" --query-mode term:auth --query-mode intent:"validate bearer token"
 ```
 
 Structured query modes:
@@ -239,8 +239,8 @@ Expansion behavior:
 
 - Expansion is off for CLI hybrid search unless `--expand` is passed or structured query modes are provided.
 - `--query-mode` structured entries work without a model provider because the user/agent supplies the lexical, intent, or HyDE text explicitly.
-- Model-generated expansion requires an expansion provider to be wired by the caller; `--expand`/`expand` controls whether that provider is allowed to add variants.
-- MCP `semantic_search` exposes `expand`, `no_expand`, `query_mode`, `query_modes`, and `explain`; its default hybrid request path allows expansion unless disabled.
+- Model-generated expansion requires an expansion provider to be wired by the caller; current CLI/MCP paths do not create one automatically, so `--expand`/`expand` can be skipped with `no_provider`.
+- MCP `semantic_search` exposes `expand`, `no_expand`, `query_mode`, `query_modes`, and `explain`; structured modes add routed variants without a provider.
 - Expansion guardrails preserve quoted phrases, negations, acronyms, and code-like symbols, and drop variants that drift too far from the original query.
 - Strong exact BM25 signals can skip model expansion so precise identifier searches stay fast.
 
@@ -251,9 +251,10 @@ Reranking behavior:
 - Reranking only applies to the top fused candidates (`maxCandidates`/`rerank_candidates`).
 - Scores are blended with fusion according to `fusionWeight` and `rerankWeight`.
 - The top exact lexical hit is protected from rerank-only demotion.
-- If the reranker is missing or errors, search returns fusion-only results with fallback metadata when `--explain`/`explain` is enabled.
+- If no HTTP rerank endpoint is configured, reranking is skipped and no rerank metadata is attached.
+- If a configured rerank endpoint errors, search returns fusion-only ordering and JSON results include rerank fallback metadata.
 
-Use `--explain --json` to inspect source contributions (`bm25`, `bm25_variant`, `vector`, `vector_variant`, `hyde`) and rerank metadata when available.
+Use `--explain --json` to inspect source contributions (`bm25`, `bm25_variant`, `vector`, `vector_variant`, `hyde`). JSON output includes rerank metadata when reranking runs or a configured reranker errors.
 
 ## Speed vs. quality guidance
 
@@ -282,6 +283,6 @@ Use `--explain --json` to inspect source contributions (`bm25`, `bm25_variant`, 
 
 Codegraph's model-role architecture and retrieval workflow adapt design and code ideas from the GNO retrieval modules where applicable, including role-separated retrieval models, GGUF/cache policy concepts, query expansion, weighted fusion, reranking guardrails, and resilient embedding behavior.
 
-GNO source reference: `/tmp/pi-github-repos/gmickel/gno`.
+GNO source reference: https://github.com/gmickel/gno.
 
-GNO is MIT licensed: Copyright (c) 2025 Gordon Mickel.
+GNO is MIT licensed: MIT License, Copyright (c) 2025 Gordon Mickel.

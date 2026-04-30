@@ -405,7 +405,7 @@ codegraph search "parse config" --min-score 0.4 -n 10
 codegraph search "parseConfig" --mode keyword   # BM25 keyword-only (exact names)
 codegraph search "auth flow" --mode semantic    # Embedding-only (conceptual)
 codegraph search "auth flow" --mode hybrid      # BM25 + semantic RRF fusion (default)
-codegraph search "auth flow" --expand --explain # Expansion + source metadata
+codegraph search "auth" --query-mode term:auth --query-mode intent:"validate bearer token" # Explicit routed variants
 codegraph models               # List available models
 ```
 
