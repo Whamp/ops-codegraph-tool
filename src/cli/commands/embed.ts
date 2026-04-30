@@ -1,10 +1,33 @@
 import path from 'node:path';
 import {
   buildEmbeddings,
+  DEFAULT_MODEL,
   EMBEDDING_STRATEGIES,
+  MODELS,
   resolveModelRoleUri,
 } from '../../domain/search/index.js';
+import { warn } from '../../infrastructure/logger.js';
 import type { CommandDefinition } from '../types.js';
+
+function isLegacyEmbeddingModel(model: string): boolean {
+  return MODELS[model] != null || Object.values(MODELS).some((config) => config.name === model);
+}
+
+function resolveEmbedCommandModel(
+  explicitModel: string | undefined,
+  config: Parameters<typeof resolveModelRoleUri>[0],
+): string {
+  if (explicitModel) return explicitModel;
+
+  const roleModel = resolveModelRoleUri(config, 'embed');
+  if (isLegacyEmbeddingModel(roleModel)) return roleModel;
+
+  const legacyModel = config?.embeddings?.model || DEFAULT_MODEL;
+  warn(
+    `Embed role resolved to unsupported model "${roleModel}" for the current transformer runtime; using legacy embedding model "${legacyModel}".`,
+  );
+  return legacyModel;
+}
 
 export const command: CommandDefinition = {
   name: 'embed [dir]',
@@ -29,7 +52,7 @@ export const command: CommandDefinition = {
   },
   async execute([dir], opts, ctx) {
     const root = path.resolve(dir || '.');
-    const model = (opts.model as string) || resolveModelRoleUri(ctx.config, 'embed');
+    const model = resolveEmbedCommandModel(opts.model as string | undefined, ctx.config);
     await buildEmbeddings(root, model, opts.db as string | undefined, { strategy: opts.strategy });
   },
 };
