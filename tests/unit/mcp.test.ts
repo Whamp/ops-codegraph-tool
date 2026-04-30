@@ -156,11 +156,19 @@ describe('TOOLS', () => {
     expect(ch.inputSchema.properties).toHaveProperty('offset');
   });
 
-  it('semantic_search requires query parameter', () => {
+  it('semantic_search requires query parameter and exposes hybrid retrieval controls', () => {
     const ss = TOOLS.find((t) => t.name === 'semantic_search');
     expect(ss.inputSchema.required).toContain('query');
     expect(ss.inputSchema.properties).toHaveProperty('limit');
     expect(ss.inputSchema.properties).toHaveProperty('min_score');
+    expect(ss.inputSchema.properties).toHaveProperty('expand');
+    expect(ss.inputSchema.properties).toHaveProperty('no_expand');
+    expect(ss.inputSchema.properties).toHaveProperty('rerank');
+    expect(ss.inputSchema.properties).toHaveProperty('no_rerank');
+    expect(ss.inputSchema.properties).toHaveProperty('rerank_candidates');
+    expect(ss.inputSchema.properties).toHaveProperty('query_mode');
+    expect(ss.inputSchema.properties).toHaveProperty('query_modes');
+    expect(ss.inputSchema.properties).toHaveProperty('explain');
   });
 
   it('export_graph requires format parameter with enum', () => {
