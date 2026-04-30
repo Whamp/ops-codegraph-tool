@@ -1,4 +1,10 @@
-# Token Savings Benchmark
+# Benchmarks
+
+## Retrieval Model Benchmark
+
+See [RETRIEVAL.md](./RETRIEVAL.md) for the reproducible, local-only benchmark comparing Codegraph's current embedding path, existing alternatives, and the GNO/Qwen-style preset path on code-focused retrieval fixtures.
+
+## Token Savings Benchmark
 
 Quantifies how much codegraph reduces token usage when AI agents navigate large codebases, compared to raw file exploration (Glob/Grep/Read/Bash).
 
