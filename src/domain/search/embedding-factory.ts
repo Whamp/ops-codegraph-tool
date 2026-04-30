@@ -19,11 +19,15 @@ export interface EmbeddingPortFactoryOptions {
 }
 
 class FormattingEmbeddingPort implements EmbeddingPort {
-  constructor(
-    private readonly inner: EmbeddingPort,
-    private readonly modelUri: string | undefined,
-    private readonly inputType: EmbeddingInputType,
-  ) {}
+  private readonly inner: EmbeddingPort;
+  private readonly modelUri: string | undefined;
+  private readonly inputType: EmbeddingInputType;
+
+  constructor(inner: EmbeddingPort, modelUri: string | undefined, inputType: EmbeddingInputType) {
+    this.inner = inner;
+    this.modelUri = modelUri;
+    this.inputType = inputType;
+  }
 
   async embedBatch(texts: string[]): Promise<Float32Array[]> {
     return this.inner.embedBatch(
@@ -59,14 +63,17 @@ async function importOptionalRuntime(specifier: string): Promise<unknown> {
 }
 
 class NodeLlamaCppEmbeddingPort implements EmbeddingPort {
+  private readonly runtimeLoader: () => Promise<unknown>;
+  private readonly modelPath: string;
+  private readonly modelUri: string;
   private context: LlamaEmbeddingContext | undefined;
   private model: LlamaEmbeddingModel | undefined;
 
-  constructor(
-    private readonly runtimeLoader: () => Promise<unknown>,
-    private readonly modelPath: string,
-    private readonly modelUri: string,
-  ) {}
+  constructor(runtimeLoader: () => Promise<unknown>, modelPath: string, modelUri: string) {
+    this.runtimeLoader = runtimeLoader;
+    this.modelPath = modelPath;
+    this.modelUri = modelUri;
+  }
 
   async embedBatch(texts: string[]): Promise<Float32Array[]> {
     const context = await this.getContext();

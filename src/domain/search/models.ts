@@ -360,6 +360,7 @@ async function loadModel(modelKey?: string): Promise<{ extractor: unknown; confi
 }
 
 class TransformerEmbeddingPort implements EmbeddingPort {
+  private readonly modelKey: string;
   private loaded:
     | {
         ext: unknown;
@@ -367,7 +368,9 @@ class TransformerEmbeddingPort implements EmbeddingPort {
       }
     | undefined;
 
-  constructor(private readonly modelKey: string = LEGACY_TRANSFORMER_DEFAULT_MODEL) {}
+  constructor(modelKey: string = LEGACY_TRANSFORMER_DEFAULT_MODEL) {
+    this.modelKey = modelKey;
+  }
 
   async embedBatch(texts: string[]): Promise<Float32Array[]> {
     if (!this.loaded) {
@@ -404,9 +407,13 @@ export function createTransformerEmbeddingPort(modelKey?: string): EmbeddingPort
   return new TransformerEmbeddingPort(modelKey ?? LEGACY_TRANSFORMER_DEFAULT_MODEL);
 }
 
-async function createDefaultEmbeddingPort(): Promise<EmbeddingPort> {
+async function createFactoryEmbeddingPort(modelUri: string): Promise<EmbeddingPort> {
   const { createEmbeddingPort } = await import('./embedding-factory.js');
-  return createEmbeddingPort(DEFAULT_MODEL, { inputType: 'raw' });
+  return createEmbeddingPort(modelUri, { inputType: 'raw' });
+}
+
+function isTransformerModelKeyOrName(modelKeyOrUri: string): boolean {
+  return MODELS[resolveModelKey(modelKeyOrUri)] != null;
 }
 
 /**
@@ -416,11 +423,12 @@ export async function embed(
   texts: string[],
   modelKey?: string,
 ): Promise<{ vectors: Float32Array[]; dim: number }> {
-  const config = modelKey ? getModelConfig(modelKey) : getEmbeddingModelConfig(DEFAULT_MODEL);
-  const batchSize = getEmbeddingBatchSize(modelKey);
-  const basePort = modelKey
-    ? createTransformerEmbeddingPort(modelKey)
-    : await createDefaultEmbeddingPort();
+  const modelKeyOrUri = modelKey ?? DEFAULT_MODEL;
+  const config = getEmbeddingModelConfig(modelKeyOrUri);
+  const batchSize = getEmbeddingBatchSize(modelKeyOrUri);
+  const basePort = isTransformerModelKeyOrName(modelKeyOrUri)
+    ? createTransformerEmbeddingPort(modelKeyOrUri)
+    : await createFactoryEmbeddingPort(modelKeyOrUri);
   let embeddedCount = 0;
   const progressPort: EmbeddingPort = {
     async embedBatch(batch) {
