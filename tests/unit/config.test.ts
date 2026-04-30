@@ -75,6 +75,12 @@ describe('DEFAULTS', () => {
     expect(DEFAULTS.search).toEqual({
       defaultMinScore: 0.2,
       nearTopRankBonusMultiplier: 0.4,
+      rerank: {
+        enabled: false,
+        fusionWeight: 0.4,
+        maxCandidates: 20,
+        rerankWeight: 0.6,
+      },
       rrfK: 60,
       rrfWeights: {
         bm25: 2,

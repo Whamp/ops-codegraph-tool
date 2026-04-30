@@ -26,6 +26,8 @@ export interface SemanticSearchOpts {
   queryModes?: QueryModeInput[];
   queryTextKind?: QueryTextKind;
   explain?: boolean;
+  /** Injected rerank port for cross-encoder reranking (default-off unless provided + config enabled) */
+  rerankPort?: import('./rerank.js').RerankPort;
 }
 
 interface SemanticResult {
@@ -53,6 +55,8 @@ function bruteForceSemanticResults(
       results.push({
         ...normalizeSymbol(row, db as BetterSqlite3Database, hc),
         similarity: sim,
+        text_preview: row.text_preview,
+        full_text: row.full_text,
       });
     }
   }
@@ -88,6 +92,8 @@ function tryAcceleratedSemanticResults(
     results.push({
       ...normalizeSymbol(row, db as BetterSqlite3Database, hc),
       similarity: hit.similarity,
+      text_preview: row.text_preview,
+      full_text: row.full_text,
     });
   }
   return results;

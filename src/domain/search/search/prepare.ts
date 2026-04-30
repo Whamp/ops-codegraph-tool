@@ -13,6 +13,7 @@ export interface PreparedSearch {
     node_id: number;
     vector: Buffer;
     text_preview: string;
+    full_text?: string | null;
     name: string;
     kind: string;
     file: string;
@@ -56,11 +57,15 @@ export function prepareSearch(
       modelKey = MODELS[resolvedStoredModel] ? resolvedStoredModel : storedModel;
     }
 
+    const hasFullTextColumn = (
+      db.prepare("PRAGMA table_info('embeddings')").all() as Array<{ name: string }>
+    ).some((column) => column.name === 'full_text');
+
     const fp = opts.filePattern;
     const fpArr = Array.isArray(fp) ? fp : fp ? [fp] : [];
     const isGlob = fpArr.length > 0 && fpArr.some((p) => /[*?[\]]/.test(p));
     let sql = `
-    SELECT e.node_id, e.vector, e.text_preview, n.name, n.kind, n.file, n.line, n.end_line, n.role
+    SELECT e.node_id, e.vector, e.text_preview, ${hasFullTextColumn ? 'e.full_text' : 'NULL'} AS full_text, n.name, n.kind, n.file, n.line, n.end_line, n.role
     FROM embeddings e
     JOIN nodes n ON e.node_id = n.id
   `;
