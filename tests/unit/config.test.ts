@@ -74,9 +74,19 @@ describe('DEFAULTS', () => {
   it('has search defaults', () => {
     expect(DEFAULTS.search).toEqual({
       defaultMinScore: 0.2,
+      nearTopRankBonusMultiplier: 0.4,
       rrfK: 60,
-      topK: 15,
+      rrfWeights: {
+        bm25: 2,
+        bm25Variant: 0.5,
+        hyde: 0.7,
+        vector: 2,
+        vectorVariant: 0.5,
+      },
       similarityWarnThreshold: 0.85,
+      topK: 15,
+      topRankBonus: 0.1,
+      topRankThreshold: 5,
     });
   });
 
