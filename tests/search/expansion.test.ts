@@ -118,6 +118,40 @@ describe('query expansion parsing and guardrails', () => {
     expect(guarded.hyde).toBeUndefined();
   });
 
+  test('preserves dotted unquoted negations and rejects positive reintroduction', () => {
+    const guarded = applyExpansionGuardrails('debug -Node.js runtime', {
+      lexicalQueries: ['debug -Node.js runtime guide', 'debug -Node runtime Node.js guide'],
+      vectorQueries: ['debug -Node.js runtime details', 'debug -Node.js Node.js runtime details'],
+      hyde: 'Debugging -Node.js runtime code should still discuss Node.js behavior positively.',
+    });
+
+    expect(guarded.lexicalQueries).toContain('-Node.js');
+    expect(guarded.lexicalQueries).toContain('debug -Node.js runtime guide');
+    expect(guarded.lexicalQueries).not.toContain('debug -Node runtime Node.js guide');
+    expect(guarded.vectorQueries).toEqual(['debug -Node.js runtime details']);
+    expect(guarded.hyde).toBeUndefined();
+  });
+
+  test('keeps dotted negated symbols from becoming positive critical entities', () => {
+    const guarded = applyExpansionGuardrails('audit -React.useEffect cleanup', {
+      lexicalQueries: [
+        'audit -React.useEffect cleanup plan',
+        'audit -React useEffect cleanup plan',
+      ],
+      vectorQueries: [
+        'audit -React.useEffect cleanup details',
+        'audit -React.useEffect React.useEffect cleanup details',
+      ],
+      hyde: 'Audit -React.useEffect cleanup paths without recommending React.useEffect.',
+    });
+
+    expect(guarded.lexicalQueries[0]).toBe('-React.useEffect');
+    expect(guarded.lexicalQueries).toContain('audit -React.useEffect cleanup plan');
+    expect(guarded.lexicalQueries).not.toContain('audit -React useEffect cleanup plan');
+    expect(guarded.vectorQueries).toEqual(['audit -React.useEffect cleanup details']);
+    expect(guarded.hyde).toBeUndefined();
+  });
+
   test('does not treat quoted negations as positive quoted phrase anchors', () => {
     const guarded = applyExpansionGuardrails('AuthService -"legacy code" migration', {
       lexicalQueries: ['AuthService -"legacy code" migration plan'],

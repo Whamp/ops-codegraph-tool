@@ -1,6 +1,7 @@
 const JSON_EXTRACT_PATTERN = /\{[\s\S]*?\}/;
 const QUOTED_PHRASE_PATTERN = /"([^"]+)"/g;
-const NEGATION_PATTERN = /(^|[\s([{,.;:!?])-(?:"([^"]+)"|([^\s)\]},.;:!?]+))/g;
+const NEGATION_PATTERN =
+  /(^|[\s([{,.;:!?])-(?:"([^"]+)"|([A-Za-z0-9_+#-](?:[A-Za-z0-9_+#-]|\.(?=[A-Za-z0-9_+#-]))*))/g;
 const TOKEN_PATTERN = /[A-Za-z0-9][A-Za-z0-9.+#_-]*/g;
 const MAX_VARIANTS = 5;
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -158,7 +159,10 @@ function hasPositiveNegatedValue(candidate: string, negation: string): boolean {
   const value = parseNegationValue(negation);
   if (!value) return false;
   const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[^A-Za-z0-9_#.+-])${escaped}($|[^A-Za-z0-9_#.+-])`, 'i').test(candidate);
+  return new RegExp(
+    `(^|[^A-Za-z0-9_#.+-])${escaped}(?=$|[^A-Za-z0-9_#.+-]|\\.(?:$|\\s))`,
+    'i',
+  ).test(candidate);
 }
 
 function contradictsNegation(signals: QuerySignals, candidate: string): boolean {
