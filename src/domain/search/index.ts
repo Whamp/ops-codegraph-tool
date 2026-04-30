@@ -14,6 +14,7 @@ export type {
   RetrievalModelPreset,
 } from './models.js';
 export {
+  createTransformerEmbeddingPort,
   DEFAULT_MODEL,
   DEFAULT_RETRIEVAL_PRESET,
   disposeModel,
@@ -25,6 +26,8 @@ export {
   resolveModelRoleUri,
   resolveRetrievalModels,
 } from './models.js';
+export type { EmbeddingPort, EmbeddingRecoveryOptions } from './ports.js';
+export { embedWithRecovery } from './ports.js';
 export { search } from './search/cli-formatter.js';
 export { hybridSearchData } from './search/hybrid.js';
 export { ftsSearchData } from './search/keyword.js';
