@@ -113,6 +113,8 @@ export type LanguageId =
 /** Engine mode selector. */
 export type EngineMode = 'native' | 'wasm' | 'auto';
 
+export type ModelRole = 'embed' | 'rerank' | 'expand' | 'gen';
+
 /** Graph export formats. */
 export type ExportFormat = 'dot' | 'mermaid' | 'json' | 'graphml' | 'graphson' | 'neo4j-csv';
 
@@ -1115,6 +1117,11 @@ export interface CodegraphConfig {
   embeddings: {
     model: string;
     llmProvider: string | null;
+  };
+
+  models?: {
+    preset?: string;
+    roles?: Partial<Record<ModelRole, string>>;
   };
 
   llm: {

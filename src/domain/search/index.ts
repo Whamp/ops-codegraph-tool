@@ -6,8 +6,25 @@
 
 export type { BuildEmbeddingsOptions } from './generator.js';
 export { buildEmbeddings, estimateTokens } from './generator.js';
-export type { ModelConfig } from './models.js';
-export { DEFAULT_MODEL, disposeModel, EMBEDDING_STRATEGIES, embed, MODELS } from './models.js';
+export type {
+  ModelConfig,
+  ModelRole,
+  ModelRoleMap,
+  ResolvedRetrievalModels,
+  RetrievalModelPreset,
+} from './models.js';
+export {
+  DEFAULT_MODEL,
+  DEFAULT_RETRIEVAL_PRESET,
+  disposeModel,
+  EMBEDDING_STRATEGIES,
+  embed,
+  MODELS,
+  RETRIEVAL_MODEL_PRESETS,
+  resolveModelKey,
+  resolveModelRoleUri,
+  resolveRetrievalModels,
+} from './models.js';
 export { search } from './search/cli-formatter.js';
 export { hybridSearchData } from './search/hybrid.js';
 export { ftsSearchData } from './search/keyword.js';

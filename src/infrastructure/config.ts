@@ -31,6 +31,10 @@ export const DEFAULTS = {
     excludeTests: false,
   },
   embeddings: { model: 'nomic-v1.5', llmProvider: null as string | null },
+  models: {
+    preset: 'codegraph-default',
+    roles: {} as Partial<Record<'embed' | 'rerank' | 'expand' | 'gen', string>>,
+  },
   llm: {
     provider: null as string | null,
     model: null as string | null,

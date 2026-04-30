@@ -2,7 +2,7 @@ import { openReadonlyOrFail } from '../../../db/index.js';
 import { escapeLike } from '../../../db/query-builder.js';
 import { getEmbeddingCount, getEmbeddingMeta } from '../../../db/repository/embeddings.js';
 import type { BetterSqlite3Database } from '../../../types.js';
-import { MODELS } from '../models.js';
+import { MODELS, resolveModelKey } from '../models.js';
 import { applyFilters } from './filters.js';
 
 export interface PreparedSearch {
@@ -47,14 +47,10 @@ export function prepareSearch(
     const dimStr = getEmbeddingMeta(db, 'dim');
     const storedDim = dimStr ? parseInt(dimStr, 10) : null;
 
-    let modelKey = opts.model || null;
+    let modelKey = opts.model ? resolveModelKey(opts.model) : null;
     if (!modelKey && storedModel) {
-      for (const [key, config] of Object.entries(MODELS)) {
-        if (config.name === storedModel) {
-          modelKey = key;
-          break;
-        }
-      }
+      const resolvedStoredModel = resolveModelKey(storedModel);
+      modelKey = MODELS[resolvedStoredModel] ? resolvedStoredModel : storedModel;
     }
 
     const fp = opts.filePattern;
