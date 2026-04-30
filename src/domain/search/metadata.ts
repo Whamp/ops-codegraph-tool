@@ -1,3 +1,4 @@
+import { getBuildMeta } from '../../db/index.js';
 import { getEmbeddingMeta } from '../../db/repository/embeddings.js';
 import { warn } from '../../infrastructure/logger.js';
 import type { BetterSqlite3Database } from '../../types.js';
@@ -12,6 +13,7 @@ export interface EmbeddingMetadata {
   compatibilityProfile?: string;
   formatterVersion?: string;
   builtAt?: string;
+  graphBuiltAt?: string;
   isLegacy: boolean;
 }
 
@@ -34,6 +36,12 @@ function parseDimension(value: string | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function parseTimestamp(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export function readEmbeddingMetadata(db: BetterSqlite3Database): EmbeddingMetadata {
   const modelUri = getEmbeddingMeta(db, 'model_uri') || getEmbeddingMeta(db, 'model');
   const dimension = parseDimension(
@@ -43,6 +51,7 @@ export function readEmbeddingMetadata(db: BetterSqlite3Database): EmbeddingMetad
   const compatibilityProfile = getEmbeddingMeta(db, 'compatibility_profile');
   const formatterVersion = getEmbeddingMeta(db, 'formatter_version');
   const builtAt = getEmbeddingMeta(db, 'build_timestamp') || getEmbeddingMeta(db, 'built_at');
+  const graphBuiltAt = getBuildMeta(db, 'built_at') ?? undefined;
 
   return {
     modelUri,
@@ -51,6 +60,7 @@ export function readEmbeddingMetadata(db: BetterSqlite3Database): EmbeddingMetad
     compatibilityProfile,
     formatterVersion,
     builtAt,
+    graphBuiltAt,
     isLegacy: !getEmbeddingMeta(db, 'model_uri') || !compatibilityProfile || !formatterVersion,
   };
 }
@@ -115,6 +125,18 @@ export function diagnoseEmbeddingMetadata(
   if (stored.formatterVersion && stored.formatterVersion !== active.formatterVersion) {
     diagnostics.push(
       `formatter version is ${stored.formatterVersion}, active formatter version is ${active.formatterVersion}`,
+    );
+  }
+
+  const embeddingBuiltAt = parseTimestamp(stored.builtAt);
+  const graphBuiltAt = parseTimestamp(stored.graphBuiltAt);
+  if (
+    embeddingBuiltAt !== undefined &&
+    graphBuiltAt !== undefined &&
+    embeddingBuiltAt < graphBuiltAt
+  ) {
+    diagnostics.push(
+      `embedding build timestamp ${stored.builtAt} is older than graph build timestamp ${stored.graphBuiltAt}`,
     );
   }
 

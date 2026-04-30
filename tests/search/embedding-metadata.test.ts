@@ -65,7 +65,11 @@ function makeDb(dir: string): string {
   return dbPath;
 }
 
-function seedSearchDb(dir: string, metadata: Record<string, string>): string {
+function seedSearchDb(
+  dir: string,
+  metadata: Record<string, string>,
+  buildMetadata: Record<string, string> = {},
+): string {
   const dbPath = makeDb(dir);
   const db = new Database(dbPath);
   const nodeId = db.prepare('SELECT id FROM nodes LIMIT 1').get() as { id: number };
@@ -80,8 +84,24 @@ function seedSearchDb(dir: string, metadata: Record<string, string>): string {
   );
   const insertMeta = db.prepare('INSERT INTO embedding_meta (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(metadata)) insertMeta.run(key, value);
+  const insertBuildMeta = db.prepare('INSERT INTO build_meta (key, value) VALUES (?, ?)');
+  for (const [key, value] of Object.entries(buildMetadata)) insertBuildMeta.run(key, value);
   db.close();
   return dbPath;
+}
+
+function freshNomicMetadata(timestamp: string): Record<string, string> {
+  return {
+    model: 'nomic-ai/nomic-embed-text-v1.5',
+    model_uri: 'nomic-ai/nomic-embed-text-v1.5',
+    dim: '768',
+    dimension: '768',
+    strategy: 'structured',
+    compatibility_profile: 'default',
+    formatter_version: EMBEDDING_FORMATTER_VERSION,
+    built_at: timestamp,
+    build_timestamp: timestamp,
+  };
 }
 
 describe('embedding metadata', () => {
@@ -224,6 +244,65 @@ describe('embedding metadata', () => {
       expect(stderr).toContain('Stored embeddings may be stale');
       expect(stderr).toContain('formatter version');
       expect(stderr).toContain('codegraph embed');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('search warns when embedding metadata is older than graph build metadata', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-meta-graph-stale-'));
+    try {
+      const dbPath = seedSearchDb(dir, freshNomicMetadata('2026-01-01T00:00:00.000Z'), {
+        built_at: '2026-01-02T00:00:00.000Z',
+      });
+      QUERY_VECTORS.set('auth', vec(768));
+      const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      await searchData('auth', dbPath, { minScore: 0.1 });
+      const stderr = spy.mock.calls.map((c) => c[0]).join('');
+      spy.mockRestore();
+      expect(stderr).toContain('Stored embeddings may be stale');
+      expect(stderr).toContain('embedding build timestamp');
+      expect(stderr).toContain('older than graph build timestamp');
+      expect(stderr).toContain('codegraph embed');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
+    ['equal', '2026-01-02T00:00:00.000Z'],
+    ['newer', '2026-01-03T00:00:00.000Z'],
+  ])('search does not warn when embedding metadata is %s to graph build metadata', async (_label, embeddingTimestamp) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-meta-graph-fresh-'));
+    try {
+      const dbPath = seedSearchDb(dir, freshNomicMetadata(embeddingTimestamp), {
+        built_at: '2026-01-02T00:00:00.000Z',
+      });
+      QUERY_VECTORS.set('auth', vec(768));
+      const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      await searchData('auth', dbPath, { minScore: 0.1 });
+      const stderr = spy.mock.calls.map((c) => c[0]).join('');
+      spy.mockRestore();
+      expect(stderr).not.toContain('Stored embeddings may be stale');
+      expect(stderr).not.toContain('older than graph build timestamp');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('legacy built_at embedding timestamp is honored for graph staleness diagnostics', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-meta-graph-legacy-built-at-'));
+    try {
+      const metadata = freshNomicMetadata('2026-01-01T00:00:00.000Z');
+      delete metadata.build_timestamp;
+      const dbPath = seedSearchDb(dir, metadata, { built_at: '2026-01-02T00:00:00.000Z' });
+      QUERY_VECTORS.set('auth', vec(768));
+      const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      await searchData('auth', dbPath, { minScore: 0.1 });
+      const stderr = spy.mock.calls.map((c) => c[0]).join('');
+      spy.mockRestore();
+      expect(stderr).toContain('Stored embeddings may be stale');
+      expect(stderr).toContain('embedding build timestamp');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
