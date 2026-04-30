@@ -13,6 +13,15 @@ export { createEmbeddingPort, embedTexts } from './embedding-factory.js';
 export type { BuildEmbeddingsOptions } from './generator.js';
 export { buildEmbeddings, estimateTokens } from './generator.js';
 export { HttpEmbeddingPort, isHttpModelUri } from './http-embedding.js';
+export type { ActiveEmbeddingMetadata, EmbeddingMetadata } from './metadata.js';
+export {
+  createEmbeddingMetadataEntries,
+  diagnoseEmbeddingMetadata,
+  EMBEDDING_FORMATTER_VERSION,
+  expectedEmbeddingMetadata,
+  readEmbeddingMetadata,
+  warnIfEmbeddingMetadataStale,
+} from './metadata.js';
 export type { DownloadPolicy, ParsedModelUri } from './model-cache.js';
 export {
   isGgufModelUri,
