@@ -72,6 +72,20 @@ describe('search command model option resolution', () => {
     );
   });
 
+  test('passes additive --explain flag through to search', async () => {
+    await command.execute?.(
+      ['needle'],
+      { limit: '15', minScore: '0.2', rrfK: '60', explain: true },
+      ctx(),
+    );
+
+    expect(searchMock).toHaveBeenCalledWith(
+      'needle',
+      undefined,
+      expect.objectContaining({ explain: true }),
+    );
+  });
+
   test('parses repeatable --query-mode values and disables generated expansion by default', async () => {
     await command.execute?.(
       ['auth flow'],

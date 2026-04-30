@@ -1144,6 +1144,16 @@ export interface CodegraphConfig {
     rrfK: number;
     topK: number;
     similarityWarnThreshold: number;
+    rrfWeights?: {
+      bm25?: number;
+      bm25Variant?: number;
+      vector?: number;
+      vectorVariant?: number;
+      hyde?: number;
+    };
+    topRankBonus?: number;
+    topRankThreshold?: number;
+    nearTopRankBonusMultiplier?: number;
   };
 
   ci: {

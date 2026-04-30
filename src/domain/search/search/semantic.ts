@@ -25,6 +25,7 @@ export interface SemanticSearchOpts {
   expansionTimeoutMs?: number;
   queryModes?: QueryModeInput[];
   queryTextKind?: QueryTextKind;
+  explain?: boolean;
 }
 
 interface SemanticResult {

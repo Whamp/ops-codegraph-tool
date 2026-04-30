@@ -28,6 +28,7 @@ export const command: CommandDefinition = {
       collectFile,
     ],
     ['-j, --json', 'Output as JSON'],
+    ['--explain', 'Include weighted RRF source contribution metadata'],
     ['--offset <number>', 'Skip N results (default: 0)'],
     ['--ndjson', 'Newline-delimited JSON output'],
   ],
@@ -63,6 +64,7 @@ export const command: CommandDefinition = {
       queryModes: normalized.queryModes,
       queryTextKind: normalized.queryTextKind,
       json: opts.json as boolean | undefined,
+      explain: opts.explain as boolean | undefined,
     });
   },
 };

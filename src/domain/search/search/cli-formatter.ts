@@ -130,6 +130,15 @@ function formatHybridResults(
       if (parts.length > 0) {
         console.log(`    ${parts.join('  |  ')}`);
       }
+      if (opts.explain && r.explain?.sources?.length) {
+        const sources = r.explain.sources
+          .map(
+            (source: { source: string; stage: string; rank: number; weight: number }) =>
+              `${source.stage}/${source.source}: rank ${source.rank}, weight ${source.weight}`,
+          )
+          .join('  |  ');
+        console.log(`    Explain: ${sources}`);
+      }
     }
   }
 
