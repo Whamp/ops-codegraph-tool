@@ -481,7 +481,7 @@ export async function runRetrievalBenchmark(
       noCloudServicesRequired: true,
       downloadsDefault: 'disabled-in-mock-mode',
       realModeNote:
-        'Real mode uses local transformer/GGUF runtimes. Qwen hf: models require node-llama-cpp plus cached GGUF files unless --allow-downloads is passed.',
+        'Real mode uses local transformer/GGUF runtimes. --allow-downloads only controls Codegraph GGUF hf: cache downloads; transformer lanes may use the Hugging Face cache/network according to @huggingface/transformers environment settings. The Qwen GGUF lane creates separate document/query embedding ports for asymmetric input formatting, so plan memory accordingly.',
     },
   };
 }
@@ -498,7 +498,7 @@ function parseArgs(argv: string[]): RunRetrievalBenchmarkOptions {
     else if (arg === '--allow-downloads') options.allowDownloads = true;
     else if (arg === '--help' || arg === '-h') {
       process.stderr.write(
-        'Usage: node --experimental-strip-types --import ./scripts/ts-resolve-loader.js scripts/retrieval-benchmark.ts [--mock|--real] [--top-k N] [--models id,id] [--allow-downloads]\n',
+        'Usage: node --experimental-strip-types --import ./scripts/ts-resolve-loader.js scripts/retrieval-benchmark.ts [--mock|--real] [--top-k N] [--models id,id] [--allow-downloads]\n\n--allow-downloads permits Codegraph GGUF hf: cache downloads only; transformer lanes follow @huggingface/transformers cache/network environment settings. Real Qwen/GGUF runs use separate document/query ports for asymmetric input formatting, so plan memory accordingly.\n',
       );
       process.exit(0);
     }

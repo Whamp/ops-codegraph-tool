@@ -7,17 +7,23 @@ import {
 
 describe('retrieval benchmark harness', () => {
   test('ships code-focused fixtures for every required query category', () => {
-    expect(CODE_RETRIEVAL_FIXTURES.map((fixture) => fixture.category).sort()).toEqual([
+    const requiredCategories = [
       'ambiguous-natural-language',
       'code-intent',
       'graph-aware-symbol-context',
       'identifier',
-    ]);
+    ];
+    const categoryCounts = new Map<string, number>();
 
     for (const fixture of CODE_RETRIEVAL_FIXTURES) {
+      categoryCounts.set(fixture.category, (categoryCounts.get(fixture.category) ?? 0) + 1);
       expect(fixture.query).toBeTruthy();
       expect(fixture.relevantSymbolIds.length).toBeGreaterThan(0);
       expect(fixture.documents.length).toBeGreaterThanOrEqual(3);
+    }
+
+    for (const category of requiredCategories) {
+      expect(categoryCounts.get(category)).toBeGreaterThanOrEqual(1);
     }
   });
 

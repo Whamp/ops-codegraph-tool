@@ -42,7 +42,8 @@ CODEGRAPH_NO_AUTO_DOWNLOAD=1 node --experimental-strip-types --import ./scripts/
 Notes:
 
 - No cloud service or API key is required.
-- Transformer lanes may use the local Hugging Face cache used by `@huggingface/transformers`.
-- The Qwen/GGUF lane requires optional `node-llama-cpp` and a cached GGUF model file for the `hf:` URI, or an explicitly allowed local download.
-- By default, use `CODEGRAPH_NO_AUTO_DOWNLOAD=1` or omit `--allow-downloads` to avoid surprise downloads. To permit local model downloads intentionally, pass `--allow-downloads`.
+- Transformer lanes use `@huggingface/transformers` and may read the local Hugging Face cache or use network downloads according to that runtime's environment settings (for example `HF_HUB_OFFLINE`). The benchmark's `--allow-downloads` flag does not override transformer-runtime policy.
+- The Qwen/GGUF lane requires optional `node-llama-cpp` and a cached GGUF model file for the `hf:` URI, or an explicitly allowed Codegraph GGUF cache download.
+- By default, use `CODEGRAPH_NO_AUTO_DOWNLOAD=1`, `HF_HUB_OFFLINE=1`, or omit `--allow-downloads` to avoid surprise downloads across lanes. To permit Codegraph GGUF model downloads intentionally, pass `--allow-downloads`.
+- The real benchmark currently creates separate document and query embedding ports for the same model so asymmetric input formatting is measured correctly. On GGUF/Qwen runs this can mean two wrappers for one model; plan memory/VRAM accordingly.
 - Issue #13 owns any decision to change the default model; benchmark results are evidence only.
