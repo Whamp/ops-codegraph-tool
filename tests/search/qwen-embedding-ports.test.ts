@@ -26,9 +26,18 @@ function ggufFile(dir: string, name = 'model.gguf'): string {
 
 const originalHome = process.env.HOME;
 const originalNoAutoDownload = process.env.CODEGRAPH_NO_AUTO_DOWNLOAD;
+
+function restoreEnv(name: 'HOME' | 'CODEGRAPH_NO_AUTO_DOWNLOAD', value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
+
 afterEach(() => {
-  process.env.HOME = originalHome;
-  process.env.CODEGRAPH_NO_AUTO_DOWNLOAD = originalNoAutoDownload;
+  restoreEnv('HOME', originalHome);
+  restoreEnv('CODEGRAPH_NO_AUTO_DOWNLOAD', originalNoAutoDownload);
 });
 
 describe('Qwen embedding compatibility formatting', () => {
