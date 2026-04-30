@@ -79,7 +79,7 @@
     "node": ">=22.6"
   },
   "scripts": {
-    "build": "tsc && node -e \"require('fs').writeFileSync('dist/index.cjs',require('fs').readFileSync('src/index.cjs','utf8').replaceAll('./index.ts','./index.js'))\"",
+    "build": "tsc --build --force && node -e \"require('fs').mkdirSync('dist',{recursive:true});require('fs').writeFileSync('dist/index.cjs',require('fs').readFileSync('src/index.cjs','utf8').replaceAll('./index.ts','./index.js'))\"",
     "build:wasm": "node scripts/node-ts.js scripts/build-wasm.ts",
     "typecheck": "tsc --noEmit",
     "verify-imports": "node scripts/node-ts.js scripts/verify-imports.ts",
