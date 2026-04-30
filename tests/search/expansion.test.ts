@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest';
 import {
   applyExpansionGuardrails,
   expandOrFallback,
-  hasStrongBm25Signal,
   parseExpansionOutput,
   routeExpandedQueries,
 } from '../../src/domain/search/search/expansion.js';
@@ -79,6 +78,46 @@ describe('query expansion parsing and guardrails', () => {
     expect(guarded.hyde).toBeUndefined();
   });
 
+  test('treats identifier-like code tokens with underscores as critical anchors', () => {
+    const guarded = applyExpansionGuardrails('parse_url migration', {
+      lexicalQueries: ['url parser migration', 'parse_url migration steps'],
+      vectorQueries: ['URL parser migration', 'parse_url migration guide'],
+      hyde: 'This migration updates URL parser behavior without naming the identifier.',
+    });
+
+    expect(guarded.lexicalQueries).toContain('parse_url');
+    expect(guarded.lexicalQueries).not.toContain('url parser migration');
+    expect(guarded.vectorQueries).toEqual(['parse_url migration guide']);
+    expect(guarded.hyde).toBeUndefined();
+  });
+
+  test('does not parse hyphenated symbols as negation anchors', () => {
+    const guarded = applyExpansionGuardrails('foo-bar migration', {
+      lexicalQueries: ['foo-bar migration plan'],
+      vectorQueries: ['foo-bar migration notes'],
+    });
+
+    expect(guarded.lexicalQueries).not.toContain('-bar');
+    expect(guarded.lexicalQueries).toContain('foo-bar migration plan');
+    expect(guarded.vectorQueries).toEqual(['foo-bar migration notes']);
+  });
+
+  test('rejects positive occurrence of negated values outside explicit negation spans', () => {
+    const guarded = applyExpansionGuardrails('AuthService -legacy migration', {
+      lexicalQueries: ['AuthService -legacy legacy migration', 'AuthService -legacy migration'],
+      vectorQueries: [
+        'AuthService -legacy legacy migration details',
+        'AuthService -legacy migration details',
+      ],
+      hyde: 'AuthService -legacy migration should still describe legacy compatibility positively.',
+    });
+
+    expect(guarded.lexicalQueries).not.toContain('AuthService -legacy legacy migration');
+    expect(guarded.lexicalQueries).toContain('AuthService -legacy migration');
+    expect(guarded.vectorQueries).toEqual(['AuthService -legacy migration details']);
+    expect(guarded.hyde).toBeUndefined();
+  });
+
   test('returns null on invalid output and falls back on provider failure or timeout', async () => {
     expect(parseExpansionOutput('not json', 'auth')).toBeNull();
 
@@ -105,13 +144,6 @@ describe('query expansion parsing and guardrails', () => {
 
 describe('query expansion routing', () => {
   test('skips expansion for exact-name BM25 hits even with tiny FTS5 scores', async () => {
-    expect(
-      hasStrongBm25Signal([
-        { name: 'authenticate', bm25Score: 0.95 },
-        { name: 'authMiddleware', bm25Score: 0.7 },
-      ]),
-    ).toBe(true);
-
     const routed = await routeExpandedQueries(
       'authenticate',
       {

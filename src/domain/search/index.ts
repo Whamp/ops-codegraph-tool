@@ -59,7 +59,6 @@ export {
   applyExpansionGuardrails,
   buildExpansionPrompt,
   expandOrFallback,
-  hasStrongBm25Signal,
   parseExpansionOutput,
   routeExpandedQueries,
 } from './search/expansion.js';

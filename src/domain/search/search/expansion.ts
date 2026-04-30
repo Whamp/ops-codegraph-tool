@@ -1,11 +1,9 @@
 const JSON_EXTRACT_PATTERN = /\{[\s\S]*?\}/;
 const QUOTED_PHRASE_PATTERN = /"([^"]+)"/g;
-const NEGATION_PATTERN = /-(?:"([^"]+)"|([^\s]+))/g;
+const NEGATION_PATTERN = /(^|[\s([{,.;:!?])-(?:"([^"]+)"|([^\s)\]},.;:!?]+))/g;
 const TOKEN_PATTERN = /[A-Za-z0-9][A-Za-z0-9.+#_-]*/g;
 const MAX_VARIANTS = 5;
 const DEFAULT_TIMEOUT_MS = 5000;
-const STRONG_BM25_MIN_SCORE = 0.84;
-const STRONG_BM25_MIN_GAP = 0.14;
 const STOPWORDS = new Set([
   'a',
   'an',
@@ -109,15 +107,16 @@ function extractQuerySignals(query: string): QuerySignals {
   );
   const negations = dedupeStrings(
     [...query.matchAll(NEGATION_PATTERN)].map((match) => {
-      const phrase = match[1]?.trim();
+      const phrase = match[2]?.trim();
       if (phrase) return `-"${phrase}"`;
-      const token = match[2]?.trim();
+      const token = match[3]?.trim();
       return token ? `-${token}` : '';
     }),
   );
   const criticalEntities = dedupeStrings(
     (stripAnchorSpans(query).match(TOKEN_PATTERN) ?? []).filter(
-      (token) => /[A-Z]/.test(token) || /[+#.]/.test(token) || /[A-Za-z]\d|\d[A-Za-z]/.test(token),
+      (token) =>
+        /[A-Z]/.test(token) || /[_.+#-]/.test(token) || /[A-Za-z]\d|\d[A-Za-z]/.test(token),
     ),
   );
   return { quotedPhrases, negations, criticalEntities, overlapTokens: extractOverlapTokens(query) };
@@ -133,7 +132,11 @@ function parseNegationValue(negation: string): string {
 }
 
 function hasNegationAnchor(candidate: string, negation: string): boolean {
-  return candidate.includes(negation);
+  const value = parseNegationValue(negation);
+  if (!value) return false;
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const negatedValue = negation.startsWith('-"') ? `"${escaped}"` : escaped;
+  return new RegExp(`(^|[\\s([{,.;:!?])-${negatedValue}($|[\\s)\\]},.;:!?])`).test(candidate);
 }
 
 function hasPositiveNegatedValue(candidate: string, negation: string): boolean {
@@ -144,9 +147,9 @@ function hasPositiveNegatedValue(candidate: string, negation: string): boolean {
 }
 
 function contradictsNegation(signals: QuerySignals, candidate: string): boolean {
-  return signals.negations.some(
-    (negation) =>
-      !hasNegationAnchor(candidate, negation) && hasPositiveNegatedValue(candidate, negation),
+  const candidateWithoutNegations = stripAnchorSpans(candidate);
+  return signals.negations.some((negation) =>
+    hasPositiveNegatedValue(candidateWithoutNegations, negation),
   );
 }
 
@@ -282,13 +285,6 @@ function normalizeExactQuery(query: string): string {
     .trim()
     .replace(/^"(.*)"$/, '$1')
     .toLowerCase();
-}
-
-export function hasStrongBm25Signal(results: Bm25SignalResult[]): boolean {
-  const [top, second] = results;
-  if (!top) return false;
-  const gap = top.bm25Score - (second?.bm25Score ?? 0);
-  return top.bm25Score >= STRONG_BM25_MIN_SCORE && gap >= STRONG_BM25_MIN_GAP;
 }
 
 export function hasStrongExactBm25Signal(query: string, results: Bm25SignalResult[]): boolean {

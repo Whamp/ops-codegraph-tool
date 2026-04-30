@@ -74,11 +74,14 @@ async function collectRankedLists(
   const rankedLists: RankedItem[][] = [];
 
   for (const q of queries) {
-    const bm25Probe = ftsSearchData(q, customDbPath, { ...opts, limit: Math.min(topK, 5) });
+    const expansionEnabled = opts.expand ?? false;
+    const bm25Probe = expansionEnabled
+      ? ftsSearchData(q, customDbPath, { ...opts, limit: Math.min(topK, 5) })
+      : null;
     const routed = await routeExpandedQueries(
       q,
       {
-        enabled: opts.expand ?? false,
+        enabled: expansionEnabled,
         provider: opts.expansionProvider,
         timeoutMs: opts.expansionTimeoutMs,
       },
