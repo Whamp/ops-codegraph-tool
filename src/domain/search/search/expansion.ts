@@ -43,11 +43,14 @@ export interface QueryModeInput {
   text: string;
 }
 
+export type QueryTextKind = 'plain' | 'term' | 'intent' | 'empty';
+
 export interface StructuredQueryNormalization {
   query: string;
   queryModes: QueryModeInput[];
   usedStructuredQuerySyntax: boolean;
   derivedQuery: boolean;
+  queryTextKind: QueryTextKind;
 }
 
 export interface ExpansionResult {
@@ -69,6 +72,7 @@ export interface QueryExpansionOptions {
   provider?: ExpansionProvider;
   timeoutMs?: number;
   queryModes?: QueryModeInput[];
+  queryTextKind?: QueryTextKind;
 }
 
 export interface RoutedQueries {
@@ -285,18 +289,32 @@ export function normalizeStructuredQueryInput(
   explicitQueryModes: QueryModeInput[] = [],
 ): StructuredQueryNormalization {
   const explicit = validateQueryModeShape(explicitQueryModes);
-  if (!query.includes('\n')) {
-    return { query, queryModes: explicit, usedStructuredQuerySyntax: false, derivedQuery: false };
-  }
+  const trimmedQuery = query.trim();
+  const plainResult = (): StructuredQueryNormalization => {
+    if (!trimmedQuery && explicit.length > 0 && explicit.every((entry) => entry.mode === 'hyde')) {
+      throw new Error('HyDE-only inputs are not allowed; include a plain query, term, or intent.');
+    }
+    return {
+      query,
+      queryModes: explicit,
+      usedStructuredQuerySyntax: false,
+      derivedQuery: false,
+      queryTextKind: trimmedQuery ? 'plain' : 'empty',
+    };
+  };
 
   const nonBlankLines = query.split(/\r?\n/).filter((line) => line.trim().length > 0);
   if (nonBlankLines.length === 0) {
-    return { query, queryModes: explicit, usedStructuredQuerySyntax: false, derivedQuery: false };
+    return plainResult();
   }
 
   const hasTypedLine = nonBlankLines.some((line) => ANY_PREFIX_PATTERN.test(line.trim()));
   if (!hasTypedLine) {
-    return { query, queryModes: explicit, usedStructuredQuerySyntax: false, derivedQuery: false };
+    return plainResult();
+  }
+
+  if (!query.includes('\n') && !RECOGNIZED_PREFIX_PATTERN.test(trimmedQuery)) {
+    return plainResult();
   }
 
   const queryModes: QueryModeInput[] = [];
@@ -346,18 +364,22 @@ export function normalizeStructuredQueryInput(
   }
   let normalizedQuery = bodyLines.join(' ').trim();
   let derivedQuery = false;
+  let queryTextKind: QueryTextKind = normalizedQuery ? 'plain' : 'empty';
   if (!normalizedQuery) {
     normalizedQuery = queryModes
       .filter((entry) => entry.mode === 'term')
       .map((entry) => entry.text)
       .join(' ')
       .trim();
-    if (!normalizedQuery) {
+    if (normalizedQuery) {
+      queryTextKind = 'term';
+    } else {
       normalizedQuery = queryModes
         .filter((entry) => entry.mode === 'intent')
         .map((entry) => entry.text)
         .join(' ')
         .trim();
+      if (normalizedQuery) queryTextKind = 'intent';
     }
     derivedQuery = normalizedQuery.length > 0;
   }
@@ -372,6 +394,7 @@ export function normalizeStructuredQueryInput(
     queryModes: combinedQueryModes,
     usedStructuredQuerySyntax: true,
     derivedQuery,
+    queryTextKind,
   };
 }
 
@@ -501,12 +524,19 @@ export async function routeExpandedQueries(
   bm25ProbeResults: Bm25SignalResult[],
 ): Promise<RoutedQueries> {
   const original = query.trim();
-  const queryModeExpansion = buildExpansionFromQueryModes(options.queryModes ?? []);
+  const queryModes = options.queryModes ?? [];
+  if (!original && queryModes.length > 0 && queryModes.every((entry) => entry.mode === 'hyde')) {
+    throw new Error('HyDE-only inputs are not allowed; include a plain query, term, or intent.');
+  }
+  const queryModeExpansion = buildExpansionFromQueryModes(queryModes);
   if (queryModeExpansion) {
+    const queryTextKind = options.queryTextKind ?? (original ? 'plain' : 'empty');
+    const baseBm25 = queryTextKind === 'plain' || queryTextKind === 'term' ? [original] : [];
+    const baseSemantic = queryTextKind === 'plain' || queryTextKind === 'intent' ? [original] : [];
     return {
-      bm25Queries: dedupeStrings([original, ...queryModeExpansion.lexicalQueries]),
+      bm25Queries: dedupeStrings([...baseBm25, ...queryModeExpansion.lexicalQueries]),
       semanticQueries: dedupeStrings([
-        original,
+        ...baseSemantic,
         ...queryModeExpansion.vectorQueries,
         ...(queryModeExpansion.hyde ? [queryModeExpansion.hyde] : []),
       ]),

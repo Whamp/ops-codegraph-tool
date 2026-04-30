@@ -89,11 +89,18 @@ describe('search command model option resolution', () => {
       undefined,
       expect.objectContaining({
         expand: false,
+        queryTextKind: 'plain',
         queryModes: [
           { mode: 'term', text: '"refresh token"' },
           { mode: 'intent', text: 'token rotation' },
         ],
       }),
+    );
+  });
+
+  test('rejects explicit hyde-only query-mode values without positional query text', () => {
+    expect(command.validate?.([''], { queryMode: ['hyde:hypothetical answer'] }, ctx())).toMatch(
+      /hyde-only inputs are not allowed/i,
     );
   });
 
@@ -109,6 +116,7 @@ describe('search command model option resolution', () => {
       undefined,
       expect.objectContaining({
         expand: false,
+        queryTextKind: 'plain',
         queryModes: [
           { mode: 'term', text: '"refresh token"' },
           { mode: 'intent', text: 'token rotation' },

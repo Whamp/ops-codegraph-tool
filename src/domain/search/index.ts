@@ -59,6 +59,7 @@ export type {
   ExpansionResult,
   QueryMode,
   QueryModeInput,
+  QueryTextKind,
   StructuredQueryNormalization,
 } from './search/expansion.js';
 export {

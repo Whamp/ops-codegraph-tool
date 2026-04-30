@@ -8,7 +8,7 @@ import { getEmbeddingBatchSize, getEmbeddingModelConfig } from '../models.js';
 import { embedWithRecovery } from '../ports.js';
 import { cosineSim } from '../stores/sqlite-blob.js';
 import { createVectorIndex } from '../vector-index.js';
-import type { ExpansionProvider, QueryModeInput } from './expansion.js';
+import type { ExpansionProvider, QueryModeInput, QueryTextKind } from './expansion.js';
 import { type PreparedSearch, prepareSearch } from './prepare.js';
 
 export interface SemanticSearchOpts {
@@ -24,6 +24,7 @@ export interface SemanticSearchOpts {
   expansionProvider?: ExpansionProvider;
   expansionTimeoutMs?: number;
   queryModes?: QueryModeInput[];
+  queryTextKind?: QueryTextKind;
 }
 
 interface SemanticResult {

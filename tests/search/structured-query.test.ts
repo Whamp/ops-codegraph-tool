@@ -32,7 +32,7 @@ describe('structured query mode parsing and normalization', () => {
     expect(() => parseQueryModeSpecs(['hyde: one', 'hyde: two'])).toThrow(/Only one hyde/i);
   });
 
-  test('normalizes multi-line structured query syntax and derives base query from term or intent', () => {
+  test('normalizes multi-line structured query syntax and preserves plain vs derived base query source', () => {
     expect(
       normalizeStructuredQueryInput('auth flow\nterm: "refresh token"\nintent: token rotation'),
     ).toEqual({
@@ -43,6 +43,7 @@ describe('structured query mode parsing and normalization', () => {
       ],
       usedStructuredQuerySyntax: true,
       derivedQuery: false,
+      queryTextKind: 'plain',
     });
 
     expect(normalizeStructuredQueryInput('term: "refresh token"\nintent: token rotation')).toEqual({
@@ -53,6 +54,15 @@ describe('structured query mode parsing and normalization', () => {
       ],
       usedStructuredQuerySyntax: true,
       derivedQuery: true,
+      queryTextKind: 'term',
+    });
+
+    expect(normalizeStructuredQueryInput('intent: token rotation')).toEqual({
+      query: 'token rotation',
+      queryModes: [{ mode: 'intent', text: 'token rotation' }],
+      usedStructuredQuerySyntax: true,
+      derivedQuery: true,
+      queryTextKind: 'intent',
     });
   });
 
@@ -113,11 +123,58 @@ describe('structured query mode routing', () => {
 
     const routed = await routeExpandedQueries(
       'auth flow',
-      { queryModes: normalized.queryModes },
+      { queryModes: normalized.queryModes, queryTextKind: normalized.queryTextKind },
       [],
     );
     expect(routed.bm25Queries).toEqual(['auth flow']);
     expect(routed.semanticQueries).toEqual(['auth flow', 'Tokens rotate on use.']);
+  });
+
+  test('routes intent-only structured documents only to semantic search', async () => {
+    const normalized = normalizeStructuredQueryInput('intent: token rotation behavior');
+    const routed = await routeExpandedQueries(
+      normalized.query,
+      { queryModes: normalized.queryModes, queryTextKind: normalized.queryTextKind },
+      [],
+    );
+
+    expect(routed.bm25Queries).toEqual([]);
+    expect(routed.semanticQueries).toEqual(['token rotation behavior']);
+  });
+
+  test('routes term-only structured documents only to BM25 search', async () => {
+    const normalized = normalizeStructuredQueryInput('term: "refresh token"');
+    const routed = await routeExpandedQueries(
+      normalized.query,
+      { queryModes: normalized.queryModes, queryTextKind: normalized.queryTextKind },
+      [],
+    );
+
+    expect(routed.bm25Queries).toEqual(['"refresh token"']);
+    expect(routed.semanticQueries).toEqual([]);
+  });
+
+  test('routes mixed plain term intent documents to both only for plain text', async () => {
+    const normalized = normalizeStructuredQueryInput(
+      'auth flow\nterm: "refresh token"\nintent: token rotation behavior',
+    );
+    const routed = await routeExpandedQueries(
+      normalized.query,
+      { queryModes: normalized.queryModes, queryTextKind: normalized.queryTextKind },
+      [],
+    );
+
+    expect(routed.bm25Queries).toEqual(['auth flow', '"refresh token"']);
+    expect(routed.semanticQueries).toEqual(['auth flow', 'token rotation behavior']);
+  });
+
+  test('rejects explicit hyde-only modes without a positional query', async () => {
+    expect(() =>
+      normalizeStructuredQueryInput('', [{ mode: 'hyde', text: 'hypothetical answer' }]),
+    ).toThrow(/hyde-only inputs are not allowed/i);
+    await expect(
+      routeExpandedQueries('', { queryModes: [{ mode: 'hyde', text: 'hypothetical answer' }] }, []),
+    ).rejects.toThrow(/hyde-only inputs are not allowed/i);
   });
 
   test('routes structured modes without invoking generation provider', async () => {

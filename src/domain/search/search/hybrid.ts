@@ -87,6 +87,7 @@ async function collectRankedLists(
         provider: opts.expansionProvider,
         timeoutMs: opts.expansionTimeoutMs,
         queryModes: opts.queryModes,
+        queryTextKind: opts.queryTextKind,
       },
       bm25Probe?.results ?? [],
     );

@@ -70,6 +70,7 @@ describe('hybrid expansion routing', () => {
         { mode: 'intent', text: 'token rotation behavior' },
         { mode: 'hyde', text: 'Refresh tokens rotate on each use.' },
       ],
+      queryTextKind: 'plain',
     });
 
     expect(provider.generate).not.toHaveBeenCalled();
@@ -98,5 +99,35 @@ describe('hybrid expansion routing', () => {
       'codegraph.db',
       expect.objectContaining({ limit: 5 }),
     );
+  });
+
+  test('derived intent query is not routed to BM25 and derived term query is not routed semantically', async () => {
+    await hybridSearchData('token rotation behavior', 'codegraph.db', {
+      limit: 1,
+      queryModes: [{ mode: 'intent', text: 'token rotation behavior' }],
+      queryTextKind: 'intent',
+    });
+
+    expect(mocks.ftsSearchData).not.toHaveBeenCalled();
+    expect(mocks.searchData).toHaveBeenCalledWith(
+      'token rotation behavior',
+      'codegraph.db',
+      expect.objectContaining({ limit: 5 }),
+    );
+
+    vi.clearAllMocks();
+
+    await hybridSearchData('"refresh token"', 'codegraph.db', {
+      limit: 1,
+      queryModes: [{ mode: 'term', text: '"refresh token"' }],
+      queryTextKind: 'term',
+    });
+
+    expect(mocks.ftsSearchData).toHaveBeenCalledWith(
+      '"refresh token"',
+      'codegraph.db',
+      expect.objectContaining({ limit: 5 }),
+    );
+    expect(mocks.searchData).not.toHaveBeenCalled();
   });
 });

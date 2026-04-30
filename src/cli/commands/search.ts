@@ -61,6 +61,7 @@ export const command: CommandDefinition = {
       mode: opts.mode as 'hybrid' | 'semantic' | 'keyword' | undefined,
       expand: hasStructuredModes ? false : (opts.expand as boolean | undefined),
       queryModes: normalized.queryModes,
+      queryTextKind: normalized.queryTextKind,
       json: opts.json as boolean | undefined,
     });
   },
