@@ -16,6 +16,7 @@ import { getEmbeddingBatchSize, getEmbeddingModelConfig } from './models.js';
 import { type EmbeddingPort, embedWithRecovery } from './ports.js';
 import { buildSourceText } from './strategies/source.js';
 import { buildStructuredText } from './strategies/structured.js';
+import { createVectorIndex, vectorStorageKey } from './vector-index.js';
 
 /**
  * Rough token estimate (~4 chars per token for code/English).
@@ -199,6 +200,16 @@ export async function buildEmbeddings(
   const vectors = embedded.vectors;
   const dim = embedded.dim ?? vectors[0]?.length ?? config.dim;
 
+  const activeMetadata = expectedEmbeddingMetadata({
+    modelUri: config.name,
+    dimension: dim,
+    strategy,
+  });
+  const vectorIndex = createVectorIndex(db, activeMetadata);
+  const metadataKey = vectorStorageKey(activeMetadata);
+  vectorIndex.vecDirty = true;
+  db.prepare('DELETE FROM embedding_vectors WHERE metadata_key = ?').run(metadataKey);
+
   const insert = db.prepare(
     'INSERT OR REPLACE INTO embeddings (node_id, vector, text_preview, full_text) VALUES (?, ?, ?, ?)',
   );
@@ -229,6 +240,21 @@ export async function buildEmbeddings(
     }
   });
   insertAll();
+
+  const vectorWrite = vectorIndex.upsertVectors(
+    vectors.map((vec, i) => ({
+      nodeId: nodeIds[i]!,
+      model: config.name,
+      metadataKey,
+      embedding: vec,
+    })),
+  );
+  if (!vectorWrite.ok) {
+    warn(vectorWrite.error.message);
+  } else {
+    const rebuild = vectorIndex.rebuildVecIndex();
+    if (!rebuild.ok) warn(rebuild.error.message);
+  }
 
   console.log(
     `\nStored ${vectors.length} embeddings (${dim}d, ${config.name}, strategy: ${strategy}) in graph.db`,

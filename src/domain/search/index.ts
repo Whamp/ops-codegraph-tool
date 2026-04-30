@@ -58,3 +58,17 @@ export { hybridSearchData } from './search/hybrid.js';
 export { ftsSearchData } from './search/keyword.js';
 export { multiSearchData, searchData } from './search/semantic.js';
 export { cosineSim } from './stores/sqlite-blob.js';
+export type {
+  VectorAccelerationDriver,
+  VectorIndex,
+  VectorRow,
+  VectorSearchResult,
+} from './vector-index.js';
+export {
+  createVectorIndex,
+  decodeEmbedding,
+  encodeEmbedding,
+  setVectorAccelerationDriverForTests,
+  vectorStorageKey,
+  vectorTableName,
+} from './vector-index.js';
