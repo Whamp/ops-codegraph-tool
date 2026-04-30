@@ -54,13 +54,25 @@ export {
 export type { EmbeddingPort, EmbeddingRecoveryOptions } from './ports.js';
 export { embedWithRecovery } from './ports.js';
 export { search } from './search/cli-formatter.js';
-export type { ExpansionProvider, ExpansionResult } from './search/expansion.js';
+export type {
+  ExpansionProvider,
+  ExpansionResult,
+  QueryMode,
+  QueryModeInput,
+  QueryTextKind,
+  StructuredQueryNormalization,
+} from './search/expansion.js';
 export {
   applyExpansionGuardrails,
+  buildExpansionFromQueryModes,
   buildExpansionPrompt,
   expandOrFallback,
+  normalizeStructuredQueryInput,
   parseExpansionOutput,
+  parseQueryModeSpec,
+  parseQueryModeSpecs,
   routeExpandedQueries,
+  validateQueryModes,
 } from './search/expansion.js';
 export { hybridSearchData } from './search/hybrid.js';
 export { ftsSearchData } from './search/keyword.js';

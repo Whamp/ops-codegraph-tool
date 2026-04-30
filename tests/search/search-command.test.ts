@@ -71,4 +71,66 @@ describe('search command model option resolution', () => {
       expect.objectContaining({ expand: true }),
     );
   });
+
+  test('parses repeatable --query-mode values and disables generated expansion by default', async () => {
+    await command.execute?.(
+      ['auth flow'],
+      {
+        limit: '15',
+        minScore: '0.2',
+        rrfK: '60',
+        queryMode: ['term:"refresh token"', 'intent:token rotation'],
+      },
+      ctx(),
+    );
+
+    expect(searchMock).toHaveBeenCalledWith(
+      'auth flow',
+      undefined,
+      expect.objectContaining({
+        expand: false,
+        queryTextKind: 'plain',
+        queryModes: [
+          { mode: 'term', text: '"refresh token"' },
+          { mode: 'intent', text: 'token rotation' },
+        ],
+      }),
+    );
+  });
+
+  test('rejects explicit hyde-only query-mode values without positional query text', () => {
+    expect(command.validate?.([''], { queryMode: ['hyde:hypothetical answer'] }, ctx())).toMatch(
+      /hyde-only inputs are not allowed/i,
+    );
+  });
+
+  test('normalizes multi-line structured query syntax before searching', async () => {
+    await command.execute?.(
+      ['auth flow\nterm: "refresh token"\nintent: token rotation'],
+      { limit: '15', minScore: '0.2', rrfK: '60' },
+      ctx(),
+    );
+
+    expect(searchMock).toHaveBeenCalledWith(
+      'auth flow',
+      undefined,
+      expect.objectContaining({
+        expand: false,
+        queryTextKind: 'plain',
+        queryModes: [
+          { mode: 'term', text: '"refresh token"' },
+          { mode: 'intent', text: 'token rotation' },
+        ],
+      }),
+    );
+  });
+
+  test('returns validation errors for invalid structured query inputs', () => {
+    expect(command.validate?.(['needle'], { queryMode: ['vector: nope'] }, ctx())).toMatch(
+      /Invalid --query-mode value/,
+    );
+    expect(command.validate?.(['needle\nterm:   '], {}, ctx())).toMatch(
+      /line 2 must contain non-empty text after term:/,
+    );
+  });
 });
