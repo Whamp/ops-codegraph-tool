@@ -395,7 +395,7 @@ codegraph cycles --functions   # Function-level cycles
 
 ### Semantic Search
 
-Local embeddings for every function, method, and class — search by natural language. Everything runs locally using [@huggingface/transformers](https://huggingface.co/docs/transformers.js) — no API keys needed.
+Local embeddings for every function, method, and class — search by natural language. The default embedding model is `nomic-v1.5`; optional GGUF and HTTP embedding backends are documented in the [retrieval workflow guide](docs/guides/retrieval-workflow.md).
 
 ```bash
 codegraph embed                # Build embeddings (default: nomic-v1.5)
@@ -405,8 +405,11 @@ codegraph search "parse config" --min-score 0.4 -n 10
 codegraph search "parseConfig" --mode keyword   # BM25 keyword-only (exact names)
 codegraph search "auth flow" --mode semantic    # Embedding-only (conceptual)
 codegraph search "auth flow" --mode hybrid      # BM25 + semantic RRF fusion (default)
+codegraph search "auth" --query-mode term:auth --query-mode intent:"validate bearer token" # Explicit routed variants
 codegraph models               # List available models
 ```
+
+For model roles/presets, re-embedding after model changes, stale-vector recovery, offline/cache policy, local GGUF setup, HTTP backends, expansion/rerank controls, structured query modes, and GNO attribution, see [Retrieval Workflow Guide](docs/guides/retrieval-workflow.md).
 
 #### Multi-query search
 

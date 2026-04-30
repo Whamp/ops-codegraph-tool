@@ -2,7 +2,7 @@
 
 ## Retrieval Model Benchmark
 
-See [RETRIEVAL.md](./RETRIEVAL.md) for the reproducible, local-only benchmark comparing Codegraph's current embedding path, existing alternatives, and the GNO/Qwen-style preset path on code-focused retrieval fixtures.
+See [RETRIEVAL.md](./RETRIEVAL.md) for the reproducible, local-only benchmark comparing Codegraph's current embedding path, existing alternatives, and the GNO/Qwen-style preset path on code-focused retrieval fixtures. For operational setup and migration guidance, see the [retrieval workflow guide](../guides/retrieval-workflow.md).
 
 ## Token Savings Benchmark
 
