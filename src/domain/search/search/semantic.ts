@@ -3,6 +3,7 @@ import { warn } from '../../../infrastructure/logger.js';
 import type { BetterSqlite3Database, CodegraphConfig } from '../../../types.js';
 import { normalizeSymbol } from '../../queries.js';
 import { createEmbeddingPort } from '../embedding-factory.js';
+import { expectedEmbeddingMetadata, warnIfEmbeddingMetadataStale } from '../metadata.js';
 import { getEmbeddingBatchSize, getEmbeddingModelConfig } from '../models.js';
 import { embedWithRecovery } from '../ports.js';
 import { cosineSim } from '../stores/sqlite-blob.js';
@@ -44,10 +45,19 @@ export async function searchData(
 
   const prepared = prepareSearch(customDbPath, opts);
   if (!prepared) return null;
-  const { db, rows, modelKey, storedDim } = prepared;
+  const { db, rows, modelKey, storedDim, storedMetadata } = prepared;
 
   try {
     const activeModel = modelKey ?? undefined;
+    const activeConfig = getEmbeddingModelConfig(activeModel);
+    warnIfEmbeddingMetadataStale(
+      storedMetadata,
+      expectedEmbeddingMetadata({
+        modelUri: activeConfig.name,
+        dimension: activeConfig.dim || undefined,
+      }),
+      { modelHint: activeModel ?? activeConfig.name, command: 'search' },
+    );
     const queryPort = await createEmbeddingPort(activeModel ?? getEmbeddingModelConfig().name, {
       inputType: 'query',
     });
@@ -108,10 +118,19 @@ export async function multiSearchData(
 
   const prepared = prepareSearch(customDbPath, opts);
   if (!prepared) return null;
-  const { db, rows, modelKey, storedDim } = prepared;
+  const { db, rows, modelKey, storedDim, storedMetadata } = prepared;
 
   try {
     const activeModel = modelKey ?? undefined;
+    const activeConfig = getEmbeddingModelConfig(activeModel);
+    warnIfEmbeddingMetadataStale(
+      storedMetadata,
+      expectedEmbeddingMetadata({
+        modelUri: activeConfig.name,
+        dimension: activeConfig.dim || undefined,
+      }),
+      { modelHint: activeModel ?? activeConfig.name, command: 'search' },
+    );
     const queryPort = await createEmbeddingPort(activeModel ?? getEmbeddingModelConfig().name, {
       inputType: 'query',
     });

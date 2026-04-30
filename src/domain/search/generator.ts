@@ -6,6 +6,12 @@ import { DbError } from '../../shared/errors.js';
 import type { BetterSqlite3Database, NodeRow } from '../../types.js';
 import { formatEmbeddingDocument } from './compatibility.js';
 import { createEmbeddingPort } from './embedding-factory.js';
+import {
+  createEmbeddingMetadataEntries,
+  expectedEmbeddingMetadata,
+  readEmbeddingMetadata,
+  warnIfEmbeddingMetadataStale,
+} from './metadata.js';
 import { getEmbeddingBatchSize, getEmbeddingModelConfig } from './models.js';
 import { type EmbeddingPort, embedWithRecovery } from './ports.js';
 import { buildSourceText } from './strategies/source.js';
@@ -77,6 +83,17 @@ export async function buildEmbeddings(
   const db = openDb(dbPath) as BetterSqlite3Database;
   initEmbeddingsSchema(db);
 
+  const config = getEmbeddingModelConfig(modelKey);
+  warnIfEmbeddingMetadataStale(
+    readEmbeddingMetadata(db),
+    expectedEmbeddingMetadata({
+      modelUri: config.name,
+      dimension: config.dim || undefined,
+      strategy,
+    }),
+    { modelHint: modelKey, command: 'embed' },
+  );
+
   // Prefer the repo root recorded at build time — embed may be invoked from a
   // different cwd (e.g. `codegraph embed --db /abs/path/graph.db`) and the
   // positional rootDir will be wrong in that case. For legacy DBs without
@@ -114,7 +131,6 @@ export async function buildEmbeddings(
   const nodeIds: number[] = [];
   const nodeNames: string[] = [];
   const previews: string[] = [];
-  const config = getEmbeddingModelConfig(modelKey);
   const contextWindow = config.contextWindow;
   let overflowCount = 0;
   let filesRead = 0;
@@ -199,12 +215,15 @@ export async function buildEmbeddings(
       );
       insertFts.run(nodeIds[i], nodeNames[i], texts[i]);
     }
-    insertMeta.run('model', config.name);
-    insertMeta.run('dim', String(dim));
+    for (const { key, value } of createEmbeddingMetadataEntries({
+      modelUri: config.name,
+      dimension: dim,
+      strategy,
+    })) {
+      insertMeta.run(key, value);
+    }
     insertMeta.run('count', String(vectors.length));
     insertMeta.run('fts_count', String(vectors.length));
-    insertMeta.run('strategy', strategy);
-    insertMeta.run('built_at', new Date().toISOString());
     if (overflowCount > 0) {
       insertMeta.run('truncated_count', String(overflowCount));
     }

@@ -2,6 +2,8 @@ import { openReadonlyOrFail } from '../../../db/index.js';
 import { escapeLike } from '../../../db/query-builder.js';
 import { getEmbeddingCount, getEmbeddingMeta } from '../../../db/repository/embeddings.js';
 import type { BetterSqlite3Database } from '../../../types.js';
+import type { EmbeddingMetadata } from '../metadata.js';
+import { readEmbeddingMetadata } from '../metadata.js';
 import { MODELS, resolveModelKey } from '../models.js';
 import { applyFilters } from './filters.js';
 
@@ -20,6 +22,7 @@ export interface PreparedSearch {
   }>;
   modelKey: string | null;
   storedDim: number | null;
+  storedMetadata: EmbeddingMetadata;
 }
 
 export interface PrepareSearchOpts {
@@ -43,9 +46,9 @@ export function prepareSearch(
       return null;
     }
 
-    const storedModel = getEmbeddingMeta(db, 'model') || null;
-    const dimStr = getEmbeddingMeta(db, 'dim');
-    const storedDim = dimStr ? parseInt(dimStr, 10) : null;
+    const storedMetadata = readEmbeddingMetadata(db);
+    const storedModel = storedMetadata.modelUri || getEmbeddingMeta(db, 'model') || null;
+    const storedDim = storedMetadata.dimension ?? null;
 
     let modelKey = opts.model ? resolveModelKey(opts.model) : null;
     if (!modelKey && storedModel) {
@@ -83,7 +86,7 @@ export function prepareSearch(
     let rows = db.prepare(sql).all(...params) as PreparedSearch['rows'];
     rows = applyFilters(rows, opts);
 
-    return { db, rows, modelKey, storedDim };
+    return { db, rows, modelKey, storedDim, storedMetadata };
   } catch (err) {
     db.close();
     throw err;
