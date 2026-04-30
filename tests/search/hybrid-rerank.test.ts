@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   ftsSearchData: vi.fn(),
   searchData: vi.fn(),
+  resolveModelRoleUri: vi.fn(),
 }));
 
 vi.mock('../../src/db/index.js', () => ({
@@ -36,6 +37,10 @@ vi.mock('../../src/infrastructure/config.js', () => ({
   loadConfig: () => mockConfig,
 }));
 
+vi.mock('../../src/domain/search/models.js', () => ({
+  resolveModelRoleUri: mocks.resolveModelRoleUri,
+}));
+
 vi.mock('../../src/domain/search/stores/fts5.js', () => ({
   hasFtsIndex: () => true,
 }));
@@ -52,7 +57,7 @@ import type { RerankPort } from '../../src/domain/search/search/rerank.js';
 
 const { hybridSearchData } = await import('../../src/domain/search/search/hybrid.js');
 
-const bm25Result = (name: string, bm25Score = 1) => ({
+const bm25Result = (name: string, bm25Score = 1, extra: Record<string, unknown> = {}) => ({
   name,
   kind: 'function',
   file: `src/${name}.ts`,
@@ -61,9 +66,10 @@ const bm25Result = (name: string, bm25Score = 1) => ({
   role: null,
   fileHash: null,
   bm25Score,
+  ...extra,
 });
 
-const vectorResult = (name: string, similarity = 0.9) => ({
+const vectorResult = (name: string, similarity = 0.9, extra: Record<string, unknown> = {}) => ({
   name,
   kind: 'function',
   file: `src/${name}.ts`,
@@ -72,11 +78,13 @@ const vectorResult = (name: string, similarity = 0.9) => ({
   role: null,
   fileHash: null,
   similarity,
+  ...extra,
 });
 
 describe('hybrid search with reranking', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.resolveModelRoleUri.mockReturnValue('local:unsupported-reranker');
   });
 
   test('skips reranking when rerankPort is not provided', async () => {
@@ -151,6 +159,138 @@ describe('hybrid search with reranking', () => {
     }
   });
 
+  test('uses successful rerank output to drive final result ordering', async () => {
+    mocks.ftsSearchData.mockReturnValue({ results: [bm25Result('alpha'), bm25Result('beta')] });
+    mocks.searchData.mockResolvedValue({ results: [] });
+
+    const mockPort: RerankPort = {
+      async rerank(_query: string, documents: string[]) {
+        return {
+          ok: true as const,
+          value: documents.map((_, i) => ({ index: i, score: i === 0 ? 0.1 : 0.99 })),
+        };
+      },
+    };
+
+    const data = await hybridSearchData('test query', 'codegraph.db', {
+      config: {
+        ...mockConfig,
+        search: {
+          ...mockConfig.search,
+          rerank: { ...mockConfig.search.rerank, rerankWeight: 1, fusionWeight: 0 },
+        },
+      } as any,
+      rerankPort: mockPort,
+      explain: true,
+    });
+
+    expect(data?.results.map((r) => r.name)).toEqual(['beta', 'alpha']);
+    expect(data?.results[0]?.bm25Rank).toBe(2);
+    expect(data?.results[0]?.rrf).toBeGreaterThan(0);
+  });
+
+  test('creates an HTTP rerank port from configured rerank model role when no port is injected', async () => {
+    mocks.ftsSearchData.mockReturnValue({ results: [bm25Result('alpha'), bm25Result('beta')] });
+    mocks.searchData.mockResolvedValue({ results: [] });
+    mocks.resolveModelRoleUri.mockReturnValue('https://reranker.example.test/rerank');
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify([
+            { index: 0, score: 0.2 },
+            { index: 1, score: 0.9 },
+          ]),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const data = await hybridSearchData('test query', 'codegraph.db', {
+      config: {
+        ...mockConfig,
+        search: {
+          ...mockConfig.search,
+          rerank: { ...mockConfig.search.rerank, rerankWeight: 1, fusionWeight: 0 },
+        },
+      } as any,
+      explain: true,
+    });
+
+    expect(mocks.resolveModelRoleUri).toHaveBeenCalledWith(expect.any(Object), 'rerank');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://reranker.example.test/rerank',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(data?.results.map((r) => r.name)).toEqual(['beta', 'alpha']);
+
+    vi.unstubAllGlobals();
+  });
+
+  test('protects the original plain BM25 top hit from rerank demotion at hybrid level', async () => {
+    mocks.ftsSearchData.mockReturnValue({ results: [bm25Result('alpha'), bm25Result('beta')] });
+    mocks.searchData.mockResolvedValue({ results: [] });
+
+    const mockPort: RerankPort = {
+      async rerank(_query: string, documents: string[]) {
+        return {
+          ok: true as const,
+          value: documents.map((_, i) => ({ index: i, score: i === 0 ? 0.1 : 0.99 })),
+        };
+      },
+    };
+
+    const data = await hybridSearchData('alpha', 'codegraph.db', {
+      config: {
+        ...mockConfig,
+        search: {
+          ...mockConfig.search,
+          rerank: { ...mockConfig.search.rerank, rerankWeight: 1, fusionWeight: 0 },
+        },
+      } as any,
+      rerankPort: mockPort,
+      explain: true,
+    });
+
+    expect(data?.results.map((r) => r.name)).toEqual(['alpha', 'beta']);
+    expect(data?.results[0]?.rerank?.rerankExplain?.protectedLexicalHit).toBe(true);
+  });
+
+  test('passes best available symbol text to rerank port', async () => {
+    mocks.ftsSearchData.mockReturnValue({
+      results: [
+        bm25Result('alpha', 1, { content: 'fts content alpha' }),
+        bm25Result('beta', 0.9, { text_preview: 'preview beta' }),
+        bm25Result('gamma', 0.8),
+      ],
+    });
+    mocks.searchData.mockResolvedValue({
+      results: [vectorResult('alpha', 0.9, { full_text: 'full text alpha' })],
+    });
+    let capturedDocuments: string[] = [];
+    const mockPort: RerankPort = {
+      async rerank(_query: string, documents: string[]) {
+        capturedDocuments = documents;
+        return {
+          ok: true as const,
+          value: documents.map((_, i) => ({ index: i, score: 1 - i / 10 })),
+        };
+      },
+    };
+
+    await hybridSearchData('test query', 'codegraph.db', {
+      config: mockConfig as any,
+      rerankPort: mockPort,
+      explain: true,
+    });
+
+    expect(capturedDocuments).toContain('full text alpha');
+    expect(capturedDocuments).toContain('preview beta');
+    expect(capturedDocuments).toContain('gamma (function) — src/gamma.ts:1');
+  });
+
   test('gracefully handles rerank port failure', async () => {
     mocks.ftsSearchData.mockReturnValue({ results: [bm25Result('alpha')] });
     mocks.searchData.mockResolvedValue({ results: [vectorResult('beta')] });
@@ -170,5 +310,7 @@ describe('hybrid search with reranking', () => {
     // Should still return fusion results (fallback)
     expect(data?.results).toBeDefined();
     expect(data!.results.length).toBeGreaterThan(0);
+    expect(data!.results[0]?.rerank?.rerankExplain?.fallbackCode).toBe('port_error');
+    expect(data!.results[0]?.rerank?.rerankExplain?.fallbackMessage).toBe('model crashed');
   });
 });

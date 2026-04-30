@@ -177,6 +177,7 @@ describe('rerankCandidates', () => {
         name: 'exactMatch',
         fusionScore: 0.2,
         bm25Rank: 1,
+        lexicalExactTopHit: true,
         text: 'function exactMatch() {}',
       }),
       makeCandidate({

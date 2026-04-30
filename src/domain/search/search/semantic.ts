@@ -55,6 +55,8 @@ function bruteForceSemanticResults(
       results.push({
         ...normalizeSymbol(row, db as BetterSqlite3Database, hc),
         similarity: sim,
+        text_preview: row.text_preview,
+        full_text: row.full_text,
       });
     }
   }
@@ -90,6 +92,8 @@ function tryAcceleratedSemanticResults(
     results.push({
       ...normalizeSymbol(row, db as BetterSqlite3Database, hc),
       similarity: hit.similarity,
+      text_preview: row.text_preview,
+      full_text: row.full_text,
     });
   }
   return results;

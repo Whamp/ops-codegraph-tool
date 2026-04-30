@@ -28,6 +28,51 @@ export interface RerankPort {
   rerank(query: string, documents: string[]): Promise<RerankResult>;
 }
 
+/** Create a rerank port for safe built-in URI schemes. Local model URIs are intentionally unsupported here. */
+export function createDefaultRerankPort(uri: string | undefined): RerankPort | null {
+  if (!uri) return null;
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+
+  return {
+    async rerank(query: string, documents: string[]): Promise<RerankResult> {
+      try {
+        const response = await fetch(url.toString(), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ query, documents }),
+        });
+        if (!response.ok) {
+          return { ok: false, error: new Error(`HTTP ${response.status}`) };
+        }
+        const json = (await response.json()) as unknown;
+        const scores = Array.isArray(json)
+          ? json
+          : typeof json === 'object' &&
+              json !== null &&
+              Array.isArray((json as { scores?: unknown }).scores)
+            ? (json as { scores: unknown[] }).scores
+            : null;
+        if (!scores) return { ok: false, error: new Error('Invalid rerank response') };
+        const value = scores.flatMap((entry) => {
+          if (typeof entry !== 'object' || entry === null) return [];
+          const index = (entry as { index?: unknown }).index;
+          const score = (entry as { score?: unknown }).score;
+          return typeof index === 'number' && typeof score === 'number' ? [{ index, score }] : [];
+        });
+        return { ok: true, value };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err : new Error(String(err)) };
+      }
+    },
+  };
+}
+
 export interface RerankCandidate {
   /** Unique key for the candidate (name:file:line) */
   key: string;
@@ -39,6 +84,8 @@ export interface RerankCandidate {
   fusionScore: number;
   /** BM25 rank (null if candidate was not in BM25 results) */
   bm25Rank: number | null;
+  /** True only for the original/plain lexical BM25 rank-1 hit */
+  lexicalExactTopHit?: boolean;
   /** Best available text for reranking (full_text, preview, or metadata-derived) */
   text?: string;
 }
@@ -54,6 +101,10 @@ export interface RerankedCandidate extends RerankCandidate {
 export interface RerankExplain {
   /** True if this candidate was not reranked due to port failure */
   rerankFallback?: boolean;
+  /** Stable fallback code when reranking could not be applied */
+  fallbackCode?: 'disabled' | 'port_error';
+  /** Sanitized fallback message suitable for explain output */
+  fallbackMessage?: string;
   /** True if this candidate was protected as the lexical top hit */
   protectedLexicalHit?: boolean;
   /** Fusion weight used in blending */
@@ -129,7 +180,46 @@ function buildRerankQuery(query: string, intent?: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function isProtectedLexicalTopHit(candidate: RerankCandidate): boolean {
-  return candidate.bm25Rank === PROTECT_BM25_TOP_RANK;
+  return candidate.lexicalExactTopHit === true && candidate.bm25Rank === PROTECT_BM25_TOP_RANK;
+}
+
+function sanitizeFallbackMessage(message: string): string {
+  return message
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+}
+
+function fallbackCandidates(
+  candidates: RerankCandidate[],
+  normalizeFusion: (score: number) => number,
+  fusionWeight: number,
+  rerankWeight: number,
+  fallbackCode: 'disabled' | 'port_error',
+  message?: string,
+): RerankedCandidate[] {
+  const fallbackMessage = message ? sanitizeFallbackMessage(message) : undefined;
+  return candidates
+    .map((c) => ({
+      ...c,
+      rerankScore: null,
+      blendedScore: normalizeFusion(c.fusionScore),
+      explain: {
+        rerankFallback: true,
+        fallbackCode,
+        ...(fallbackMessage ? { fallbackMessage } : {}),
+        fusionWeight,
+        rerankWeight,
+        normalizedFusion: normalizeFusion(c.fusionScore),
+        normalizedRerank: null,
+      },
+    }))
+    .sort((a, b) => {
+      const diff = b.blendedScore - a.blendedScore;
+      if (Math.abs(diff) > 1e-9) return diff;
+      return a.key.localeCompare(b.key);
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,24 +258,13 @@ export async function rerankCandidates(
   // No reranker: return fusion-only ordering
   if (!rerankPort) {
     return {
-      candidates: candidates
-        .map((c) => ({
-          ...c,
-          rerankScore: null,
-          blendedScore: normalizeFusion(c.fusionScore),
-          explain: {
-            rerankFallback: true,
-            fusionWeight,
-            rerankWeight,
-            normalizedFusion: normalizeFusion(c.fusionScore),
-            normalizedRerank: null,
-          },
-        }))
-        .sort((a, b) => {
-          const diff = b.blendedScore - a.blendedScore;
-          if (Math.abs(diff) > 1e-9) return diff;
-          return a.key.localeCompare(b.key);
-        }),
+      candidates: fallbackCandidates(
+        candidates,
+        normalizeFusion,
+        fusionWeight,
+        rerankWeight,
+        'disabled',
+      ),
       reranked: false,
       fallbackReason: 'disabled',
     };
@@ -224,27 +303,17 @@ export async function rerankCandidates(
   let rerankResult: RerankResult;
   try {
     rerankResult = await rerankPort.rerank(rerankQuery, uniqueTexts);
-  } catch {
+  } catch (err) {
     // Port threw — fall back to fusion-only
     return {
-      candidates: candidates
-        .map((c) => ({
-          ...c,
-          rerankScore: null,
-          blendedScore: normalizeFusion(c.fusionScore),
-          explain: {
-            rerankFallback: true,
-            fusionWeight,
-            rerankWeight,
-            normalizedFusion: normalizeFusion(c.fusionScore),
-            normalizedRerank: null,
-          },
-        }))
-        .sort((a, b) => {
-          const diff = b.blendedScore - a.blendedScore;
-          if (Math.abs(diff) > 1e-9) return diff;
-          return a.key.localeCompare(b.key);
-        }),
+      candidates: fallbackCandidates(
+        candidates,
+        normalizeFusion,
+        fusionWeight,
+        rerankWeight,
+        'port_error',
+        err instanceof Error ? err.message : String(err),
+      ),
       reranked: false,
       fallbackReason: 'error',
     };
@@ -253,24 +322,14 @@ export async function rerankCandidates(
   // Port returned failure — fall back
   if (!rerankResult.ok || !rerankResult.value) {
     return {
-      candidates: candidates
-        .map((c) => ({
-          ...c,
-          rerankScore: null,
-          blendedScore: normalizeFusion(c.fusionScore),
-          explain: {
-            rerankFallback: true,
-            fusionWeight,
-            rerankWeight,
-            normalizedFusion: normalizeFusion(c.fusionScore),
-            normalizedRerank: null,
-          },
-        }))
-        .sort((a, b) => {
-          const diff = b.blendedScore - a.blendedScore;
-          if (Math.abs(diff) > 1e-9) return diff;
-          return a.key.localeCompare(b.key);
-        }),
+      candidates: fallbackCandidates(
+        candidates,
+        normalizeFusion,
+        fusionWeight,
+        rerankWeight,
+        'port_error',
+        rerankResult.error?.message ?? 'Rerank port returned an error',
+      ),
       reranked: false,
       fallbackReason: 'error',
     };
