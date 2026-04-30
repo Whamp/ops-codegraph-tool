@@ -119,6 +119,50 @@ describe('model URI parsing, GGUF validation, and download policy', () => {
     }
   });
 
+  test('surfaces validation errors for invalid deterministic cached GGUF files', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-cache-invalid-local-'));
+    try {
+      const uri = 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/model.gguf';
+      const file = path.join(tmp, 'Qwen', 'Qwen3-Embedding-0.6B-GGUF', 'model.gguf');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, '<html>huggingface login</html>');
+
+      await expect(
+        new ModelCache(tmp).ensureModel(uri, 'embed', { offline: true, allowDownload: false }),
+      ).rejects.toThrow(/looks like HTML instead of GGUF/i);
+      await expect(
+        new ModelCache(tmp).ensureModel(uri, 'embed', { offline: true, allowDownload: false }),
+      ).rejects.not.toThrow(/not cached/i);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('surfaces validation errors for invalid manifest cache entries', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-cache-invalid-manifest-'));
+    try {
+      const uri = 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/model.gguf';
+      const file = path.join(tmp, 'bad.gguf');
+      fs.writeFileSync(file, 'corrupt');
+      fs.writeFileSync(
+        path.join(tmp, 'manifest.json'),
+        JSON.stringify({
+          version: '1.0',
+          models: [{ uri, type: 'embed', path: file, cachedAt: new Date().toISOString() }],
+        }),
+      );
+
+      await expect(
+        new ModelCache(tmp).ensureModel(uri, 'embed', { offline: true, allowDownload: false }),
+      ).rejects.toThrow(/missing GGUF magic header/i);
+      await expect(
+        new ModelCache(tmp).ensureModel(uri, 'embed', { offline: true, allowDownload: false }),
+      ).rejects.not.toThrow(/not cached/i);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   test('resolves policy from env with offline taking precedence', () => {
     expect(resolveDownloadPolicy({ HF_HUB_OFFLINE: '1', CODEGRAPH_NO_AUTO_DOWNLOAD: '1' })).toEqual(
       {

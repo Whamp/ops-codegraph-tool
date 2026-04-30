@@ -8,25 +8,31 @@ import { initSchema } from '../../src/db/index.js';
 // ─── Mock setup ────────────────────────────────────────────────────────
 
 // Hoisted so the mock factory can reference it
-const { QUERY_VECTORS } = vi.hoisted(() => ({
+const { QUERY_VECTORS, EMBED_BATCH_SIZES } = vi.hoisted(() => ({
   QUERY_VECTORS: new Map(),
+  EMBED_BATCH_SIZES: [] as number[],
 }));
 
 // Mock @huggingface/transformers so embed() returns controlled vectors
 // without downloading or loading a real ML model.
 vi.mock('@huggingface/transformers', () => ({
-  pipeline: async () => async (batch) => {
-    const dim = 384; // must match minilm config
-    const data = new Float32Array(dim * batch.length);
-    for (let t = 0; t < batch.length; t++) {
-      const vec = QUERY_VECTORS.get(batch[t]);
-      if (vec) {
-        for (let i = 0; i < vec.length; i++) {
-          data[t * dim + i] = vec[i];
+  pipeline: async (_task, model) => {
+    const extractor = async (batch) => {
+      EMBED_BATCH_SIZES.push(batch.length);
+      const dim = model === 'Xenova/bge-large-en-v1.5' ? 1024 : 384;
+      const data = new Float32Array(dim * batch.length);
+      for (let t = 0; t < batch.length; t++) {
+        const vec = QUERY_VECTORS.get(batch[t]);
+        if (vec) {
+          for (let i = 0; i < vec.length; i++) {
+            data[t * dim + i] = vec[i];
+          }
         }
       }
-    }
-    return { data };
+      return { data };
+    };
+    extractor.dispose = async () => {};
+    return extractor;
   },
   cos_sim: () => 0,
 }));
@@ -307,6 +313,22 @@ describe('multiSearchData', () => {
     const output = spy.mock.calls.map((c) => c[0]).join('');
     expect(output).not.toContain('very similar');
     spy.mockRestore();
+  });
+
+  test('uses the active model batch size when embedding multiple queries', async () => {
+    const modelDbPath = path.join(tmpDir, 'bge-graph.db');
+    fs.copyFileSync(dbPath, modelDbPath);
+    const db = new Database(modelDbPath);
+    db.prepare("UPDATE embedding_meta SET value = ? WHERE key = 'model'").run(
+      'Xenova/bge-large-en-v1.5',
+    );
+    db.prepare("UPDATE embedding_meta SET value = ? WHERE key = 'dim'").run('1024');
+    db.close();
+
+    EMBED_BATCH_SIZES.length = 0;
+    await multiSearchData(['auth', 'jwt', 'auth', 'jwt', 'auth'], modelDbPath, { minScore: 0.2 });
+
+    expect(EMBED_BATCH_SIZES).toEqual([4, 1]);
   });
 });
 

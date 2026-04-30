@@ -3,7 +3,7 @@ import { warn } from '../../../infrastructure/logger.js';
 import type { BetterSqlite3Database, CodegraphConfig } from '../../../types.js';
 import { normalizeSymbol } from '../../queries.js';
 import { createEmbeddingPort } from '../embedding-factory.js';
-import { getEmbeddingModelConfig } from '../models.js';
+import { getEmbeddingBatchSize, getEmbeddingModelConfig } from '../models.js';
 import { embedWithRecovery } from '../ports.js';
 import { cosineSim } from '../stores/sqlite-blob.js';
 import { prepareSearch } from './prepare.js';
@@ -115,7 +115,9 @@ export async function multiSearchData(
     const queryPort = await createEmbeddingPort(activeModel ?? getEmbeddingModelConfig().name, {
       inputType: 'query',
     });
-    const queryVecs = await embedWithRecovery(queryPort, queries);
+    const queryVecs = await embedWithRecovery(queryPort, queries, {
+      batchSize: getEmbeddingBatchSize(activeModel),
+    });
     const dim = queryVecs[0]?.length ?? getEmbeddingModelConfig(activeModel).dim;
 
     const SIMILARITY_WARN_THRESHOLD = searchCfg.similarityWarnThreshold ?? 0.85;

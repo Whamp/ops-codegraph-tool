@@ -41,6 +41,10 @@ function asError(cause: unknown): Error | undefined {
       : new Error(String(cause));
 }
 
+function isMissingFileError(cause: unknown): boolean {
+  return cause instanceof Error && (cause as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
 async function importOptionalRuntime(specifier: string): Promise<unknown> {
   return (
     new Function('specifier', 'return import(specifier)') as (value: string) => Promise<unknown>
@@ -201,12 +205,15 @@ export class ModelCache {
     if (!entry) return null;
     try {
       await stat(entry.path);
-      await validateGgufFile(entry.path, uri);
-      return entry.path;
-    } catch {
-      await this.removeFromManifest(uri);
-      return null;
+    } catch (cause) {
+      if (isMissingFileError(cause)) {
+        await this.removeFromManifest(uri);
+        return null;
+      }
+      throw cause;
     }
+    await validateGgufFile(entry.path, uri);
+    return entry.path;
   }
 
   private async findLocalCachedPath(parsed: ParsedModelUri, uri: string): Promise<string | null> {
@@ -218,11 +225,14 @@ export class ModelCache {
     ];
     for (const candidate of candidates) {
       try {
-        await validateGgufFile(candidate, uri);
-        return candidate;
-      } catch {
-        // Continue looking for deterministic local cache layouts before reporting a miss.
+        await stat(candidate);
+      } catch (cause) {
+        // Missing deterministic layouts are cache misses; existing invalid files are not.
+        if (isMissingFileError(cause)) continue;
+        throw cause;
       }
+      await validateGgufFile(candidate, uri);
+      return candidate;
     }
     return null;
   }
