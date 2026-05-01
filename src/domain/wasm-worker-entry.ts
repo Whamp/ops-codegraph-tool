@@ -667,8 +667,7 @@ async function handleParse(msg: WorkerParseRequest): Promise<SerializedExtractor
     try {
       const query = _queries.get(entry.id);
       // tree-sitter's Tree/Query are structurally compatible with
-      // TreeSitterTree/TreeSitterQuery at runtime — same cast style as
-      // parser.ts::wasmExtractSymbols (parser.ts:789).
+      // TreeSitterTree/TreeSitterQuery at runtime.
       symbols = entry.extractor(tree as any, msg.filePath, query as any) ?? null;
     } catch {
       return null;

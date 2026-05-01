@@ -1548,7 +1548,7 @@ function extractCallbackDefinition(
   // Express: app.get('/path', callback)
   if (EXPRESS_METHODS.has(method)) {
     const strArg = findFirstStringArg(args);
-    if (!strArg || !strArg.startsWith('/')) return null;
+    if (!strArg?.startsWith('/')) return null;
     const cb = findAnonymousCallback(args);
     if (!cb) return null;
     return {

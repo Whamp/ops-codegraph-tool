@@ -1,18 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Tree } from 'web-tree-sitter';
 import { Language, Parser, Query } from 'web-tree-sitter';
 import { debug, warn } from '../infrastructure/logger.js';
 import { getNative, getNativePackageVersion, loadNative } from '../infrastructure/native.js';
 import { ParseError, toErrorMessage } from '../shared/errors.js';
-import type {
-  EngineMode,
-  ExtractorOutput,
-  LanguageId,
-  LanguageRegistryEntry,
-  TypeMapEntry,
-} from '../types.js';
+import type { EngineMode, ExtractorOutput, LanguageRegistryEntry, TypeMapEntry } from '../types.js';
 import { disposeWasmWorkerPool, getWasmWorkerPool } from './wasm-worker-pool.js';
 import type { WorkerAnalysisOpts } from './wasm-worker-protocol.js';
 
@@ -141,12 +134,6 @@ interface ResolvedEngine {
   native: any;
 }
 
-interface WasmExtractResult {
-  symbols: ExtractorOutput;
-  tree: Tree;
-  langId: LanguageId;
-}
-
 // Shared patterns for all JS/TS/TSX (class_declaration excluded — name type differs)
 const COMMON_QUERY_PATTERNS: string[] = [
   '(function_declaration name: (identifier) @fn_name) @fn_node',
@@ -223,25 +210,6 @@ async function initParserRuntime(): Promise<void> {
   }
   if (!_cachedParsers) _cachedParsers = new Map();
   if (!_cachedLanguages) _cachedLanguages = new Map();
-}
-
-/**
- * Load only the WASM grammars needed for the given file paths.
- * Grammars already in cache are reused. This avoids the ~500ms cold-start
- * penalty of loading all 23+ grammars when only 1-2 are needed (e.g. incremental rebuilds).
- */
-async function ensureParsersForFiles(filePaths: string[]): Promise<Map<string, Parser | null>> {
-  await initParserRuntime();
-  const needed = new Set<LanguageRegistryEntry>();
-  for (const fp of filePaths) {
-    const ext = path.extname(fp).toLowerCase();
-    const entry = _extToLang.get(ext);
-    if (entry && !_cachedParsers!.has(entry.id)) needed.add(entry);
-  }
-  for (const entry of needed) {
-    await loadLanguage(entry);
-  }
-  return _cachedParsers!;
 }
 
 /**
@@ -915,44 +883,6 @@ async function backfillTypeMap(
     return { typeMap: new Map(), backfilled: false };
   }
   return { typeMap: output.typeMap, backfilled: true };
-}
-
-/**
- * WASM extraction helper: picks the right extractor based on file extension.
- */
-function wasmExtractSymbols(
-  parsers: Map<string, Parser | null>,
-  filePath: string,
-  code: string,
-): WasmExtractResult | null {
-  const parser = getParser(parsers, filePath);
-  if (!parser) return null;
-
-  let tree: Tree | null;
-  try {
-    tree = parser.parse(code);
-  } catch (e: unknown) {
-    warn(`Parse error in ${filePath}: ${(e as Error).message}`);
-    return null;
-  }
-  if (!tree) return null;
-
-  const ext = path.extname(filePath);
-  const entry = _extToLang.get(ext);
-  if (!entry) return null;
-  const query = _queryCache.get(entry.id) ?? undefined;
-  // Query (web-tree-sitter) is structurally compatible with TreeSitterQuery at runtime
-  let symbols: ExtractorOutput | null;
-  try {
-    symbols = entry.extractor(tree as any, filePath, query as any);
-  } catch (e: unknown) {
-    warn(`Extractor error in ${filePath}: ${(e as Error).message}`);
-    // Free WASM tree to prevent memory leak — web-tree-sitter trees are backed
-    // by WASM linear memory and are not garbage-collected automatically.
-    if (typeof (tree as any).delete === 'function') (tree as any).delete();
-    return null;
-  }
-  return symbols ? { symbols, tree, langId: entry.id } : null;
 }
 
 /**
