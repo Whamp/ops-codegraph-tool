@@ -62,7 +62,7 @@ describe('DEFAULTS', () => {
       model: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
       llmProvider: null,
     });
-    expect(DEFAULTS.models.preset).toBe('gno-compact');
+    expect(DEFAULTS.models.preset).toBe('slim-tuned');
   });
 
   it('has llm defaults', () => {

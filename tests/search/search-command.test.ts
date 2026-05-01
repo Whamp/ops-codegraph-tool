@@ -17,7 +17,7 @@ const { command } = await import('../../src/cli/commands/search.js');
 
 function ctx(): CliContext {
   return {
-    config: { models: { preset: 'gno-compact' } },
+    config: { models: { preset: 'slim-tuned' } },
     resolveNoTests: () => false,
     resolveQueryOpts: (opts) => opts,
     formatSize: (bytes) => `${bytes}B`,

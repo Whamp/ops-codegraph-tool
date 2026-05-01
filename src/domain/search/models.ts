@@ -80,10 +80,19 @@ export const EMBEDDING_STRATEGIES: readonly string[] = ['structured', 'source'];
 
 export const GNO_COMPACT_EMBEDDING_MODEL =
   'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf';
+export const GNO_RERANK_MODEL =
+  'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf';
+export const GNO_SLIM_TUNED_EXPAND_MODEL =
+  'hf:guiltylemon/gno-expansion-slim-retrieval-v1/gno-expansion-auto-entity-lock-default-mix-lr95-f16.gguf';
+export const GNO_SLIM_MODEL = 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf';
+export const GNO_BALANCED_MODEL =
+  'hf:bartowski/Qwen2.5-3B-Instruct-GGUF/Qwen2.5-3B-Instruct-Q4_K_M.gguf';
+export const GNO_QUALITY_MODEL =
+  'hf:unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf';
 export const DEFAULT_EMBEDDING_MODEL = GNO_COMPACT_EMBEDDING_MODEL;
 export const LEGACY_TRANSFORMER_DEFAULT_MODEL = 'nomic-v1.5';
 export const DEFAULT_MODEL: string = DEFAULT_EMBEDDING_MODEL;
-export const DEFAULT_RETRIEVAL_PRESET = 'gno-compact';
+export const DEFAULT_RETRIEVAL_PRESET = 'slim-tuned';
 export const LEGACY_RETRIEVAL_PRESET = 'codegraph-default';
 
 export interface RetrievalModelPreset {
@@ -99,46 +108,62 @@ export interface ResolvedRetrievalModels {
 }
 
 export const RETRIEVAL_MODEL_PRESETS: Record<string, RetrievalModelPreset> = {
-  [LEGACY_RETRIEVAL_PRESET]: {
-    name: LEGACY_RETRIEVAL_PRESET,
-    desc: 'Legacy compatibility preset: previous Codegraph embedding model plus GNO-inspired retrieval roles.',
-    roles: {
-      embed: MODELS[LEGACY_TRANSFORMER_DEFAULT_MODEL]!.name,
-      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
-      expand: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
-      gen: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
-    },
-  },
   [DEFAULT_RETRIEVAL_PRESET]: {
     name: DEFAULT_RETRIEVAL_PRESET,
-    desc: 'Compact GNO-inspired local retrieval model roles.',
+    desc: 'GNO Slim Tuned (default, ~1GB): fine-tuned query expansion plus Qwen3 1.7B generation.',
     roles: {
       embed: GNO_COMPACT_EMBEDDING_MODEL,
-      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
-      expand: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
-      gen: 'hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf',
+      rerank: GNO_RERANK_MODEL,
+      expand: GNO_SLIM_TUNED_EXPAND_MODEL,
+      gen: GNO_SLIM_MODEL,
     },
   },
-  'gno-balanced': {
-    name: 'gno-balanced',
-    desc: 'Balanced GNO-inspired retrieval model roles.',
+  slim: {
+    name: 'slim',
+    desc: 'GNO Slim (~1GB): Qwen3 1.7B expansion and generation.',
     roles: {
       embed: GNO_COMPACT_EMBEDDING_MODEL,
-      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
-      expand: 'hf:bartowski/Qwen2.5-3B-Instruct-GGUF/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
-      gen: 'hf:bartowski/Qwen2.5-3B-Instruct-GGUF/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
+      rerank: GNO_RERANK_MODEL,
+      expand: GNO_SLIM_MODEL,
+      gen: GNO_SLIM_MODEL,
     },
   },
-  'gno-quality': {
-    name: 'gno-quality',
-    desc: 'Quality-oriented GNO-inspired retrieval model roles.',
+  balanced: {
+    name: 'balanced',
+    desc: 'GNO Balanced (~2GB): Qwen2.5 3B expansion and generation.',
     roles: {
       embed: GNO_COMPACT_EMBEDDING_MODEL,
-      rerank: 'hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
-      expand: 'hf:unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
-      gen: 'hf:unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
+      rerank: GNO_RERANK_MODEL,
+      expand: GNO_BALANCED_MODEL,
+      gen: GNO_BALANCED_MODEL,
     },
   },
+  quality: {
+    name: 'quality',
+    desc: 'GNO Quality (best answers, ~2.5GB): Qwen3 4B expansion and generation.',
+    roles: {
+      embed: GNO_COMPACT_EMBEDDING_MODEL,
+      rerank: GNO_RERANK_MODEL,
+      expand: GNO_QUALITY_MODEL,
+      gen: GNO_QUALITY_MODEL,
+    },
+  },
+  [LEGACY_RETRIEVAL_PRESET]: {
+    name: LEGACY_RETRIEVAL_PRESET,
+    desc: 'Legacy Codegraph preset: previous transformer embedding model with GNO-style optional roles.',
+    roles: {
+      embed: MODELS[LEGACY_TRANSFORMER_DEFAULT_MODEL]!.name,
+      rerank: GNO_RERANK_MODEL,
+      expand: GNO_SLIM_MODEL,
+      gen: GNO_SLIM_MODEL,
+    },
+  },
+};
+
+const RETRIEVAL_PRESET_ALIASES: Record<string, string> = {
+  'gno-compact': 'slim',
+  'gno-balanced': 'balanced',
+  'gno-quality': 'quality',
 };
 const NPM_BIN = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const BATCH_SIZE_MAP: Record<string, number> = {
@@ -175,9 +200,19 @@ export function getModelConfig(modelKey?: string): ModelConfig {
   return config;
 }
 
+const EXTERNAL_EMBEDDING_MODEL_CONFIGS: Record<string, ModelConfig> = {
+  [GNO_COMPACT_EMBEDDING_MODEL]: {
+    name: GNO_COMPACT_EMBEDDING_MODEL,
+    dim: 1024,
+    contextWindow: 32_768,
+    desc: 'Qwen3 embedding GGUF (~640MB). Multilingual/code retrieval, 32k context.',
+    quantized: true,
+  },
+};
+
 export function getEmbeddingModelConfig(modelKey?: string): ModelConfig {
   const key = resolveModelKey(modelKey);
-  const config = MODELS[key];
+  const config = MODELS[key] ?? EXTERNAL_EMBEDDING_MODEL_CONFIGS[key];
   if (config) return config;
   return {
     name: key,
@@ -197,15 +232,14 @@ function resolveConfiguredEmbeddingUri(config?: CodegraphConfig): string | undef
 
 export function resolveRetrievalModels(config?: CodegraphConfig): ResolvedRetrievalModels {
   const requestedPreset = config?.models?.preset || DEFAULT_RETRIEVAL_PRESET;
+  const resolvedPreset = RETRIEVAL_PRESET_ALIASES[requestedPreset] ?? requestedPreset;
   const preset =
-    RETRIEVAL_MODEL_PRESETS[requestedPreset] ?? RETRIEVAL_MODEL_PRESETS[DEFAULT_RETRIEVAL_PRESET]!;
+    RETRIEVAL_MODEL_PRESETS[resolvedPreset] ?? RETRIEVAL_MODEL_PRESETS[DEFAULT_RETRIEVAL_PRESET]!;
   const roles: ModelRoleMap = { ...preset.roles };
   const overrides = config?.models?.roles;
 
   const selectedBuiltInPresetWithOwnEmbedding =
-    requestedPreset !== DEFAULT_RETRIEVAL_PRESET &&
-    requestedPreset !== LEGACY_RETRIEVAL_PRESET &&
-    preset.name === requestedPreset;
+    preset.name !== DEFAULT_RETRIEVAL_PRESET && preset.name !== LEGACY_RETRIEVAL_PRESET;
   const configuredEmbed = selectedBuiltInPresetWithOwnEmbedding
     ? undefined
     : resolveConfiguredEmbeddingUri(config);
@@ -223,7 +257,7 @@ export function resolveRetrievalModels(config?: CodegraphConfig): ResolvedRetrie
 
   return {
     preset: preset.name,
-    requestedPreset: requestedPreset === preset.name ? undefined : requestedPreset,
+    requestedPreset: RETRIEVAL_MODEL_PRESETS[resolvedPreset] ? undefined : requestedPreset,
     roles,
   };
 }

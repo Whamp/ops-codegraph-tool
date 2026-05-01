@@ -35,7 +35,7 @@ export const DEFAULTS = {
     llmProvider: null as string | null,
   },
   models: {
-    preset: 'gno-compact',
+    preset: 'slim-tuned',
     roles: {} as Partial<Record<'embed' | 'rerank' | 'expand' | 'gen', string>>,
   },
   llm: {

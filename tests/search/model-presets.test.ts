@@ -9,6 +9,7 @@ import {
   resolveModelRoleUri,
   resolveRetrievalModels,
 } from '../../src/domain/search/index.js';
+import { getEmbeddingModelConfig } from '../../src/domain/search/models.js';
 import { DEFAULTS } from '../../src/infrastructure/config.js';
 import type { CodegraphConfig } from '../../src/types.js';
 
@@ -22,16 +23,18 @@ function config(overrides: Partial<CodegraphConfig> = {}): CodegraphConfig {
 }
 
 describe('retrieval model role resolution', () => {
-  test('resolves every role from the GNO compact default preset', () => {
+  test('resolves every role from GNO slim-tuned as the default preset', () => {
     const resolved = resolveRetrievalModels(config());
 
-    expect(DEFAULT_RETRIEVAL_PRESET).toBe('gno-compact');
+    expect(DEFAULT_RETRIEVAL_PRESET).toBe('slim-tuned');
     expect(DEFAULT_MODEL).toBe(DEFAULT_EMBEDDING_MODEL);
-    expect(resolved.preset).toBe('gno-compact');
+    expect(resolved.preset).toBe('slim-tuned');
     expect(resolved.roles.embed).toBe(DEFAULT_EMBEDDING_MODEL);
     expect(resolved.roles.rerank).toContain('Reranker');
-    expect(resolved.roles.expand).toContain('Qwen');
-    expect(resolved.roles.gen).toContain('Qwen');
+    expect(resolved.roles.expand).toBe(
+      'hf:guiltylemon/gno-expansion-slim-retrieval-v1/gno-expansion-auto-entity-lock-default-mix-lr95-f16.gguf',
+    );
+    expect(resolved.roles.gen).toBe('hf:unsloth/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf');
   });
 
   test('keeps codegraph-default available as a legacy compatibility preset', () => {
@@ -62,11 +65,11 @@ describe('retrieval model role resolution', () => {
     const resolved = resolveRetrievalModels({
       ...(DEFAULTS as CodegraphConfig),
       embeddings: { ...DEFAULTS.embeddings },
-      models: { ...DEFAULTS.models, preset: 'gno-balanced' },
+      models: { ...DEFAULTS.models, preset: 'balanced' },
     });
 
-    expect(resolved.preset).toBe('gno-balanced');
-    expect(resolved.roles.embed).toBe(RETRIEVAL_MODEL_PRESETS['gno-balanced']!.roles.embed);
+    expect(resolved.preset).toBe('balanced');
+    expect(resolved.roles.embed).toBe(RETRIEVAL_MODEL_PRESETS.balanced!.roles.embed);
     expect(resolved.roles.embed).not.toBe(MODELS[LEGACY_TRANSFORMER_DEFAULT_MODEL]!.name);
   });
 
@@ -74,7 +77,7 @@ describe('retrieval model role resolution', () => {
     const resolved = resolveRetrievalModels(
       config({
         models: {
-          preset: 'gno-compact',
+          preset: 'slim-tuned',
           roles: {
             embed: 'hf:custom/embed-model',
             rerank: 'http://localhost:8080/rerank',
@@ -83,7 +86,7 @@ describe('retrieval model role resolution', () => {
       }),
     );
 
-    expect(resolved.preset).toBe('gno-compact');
+    expect(resolved.preset).toBe('slim-tuned');
     expect(resolved.roles.embed).toBe('hf:custom/embed-model');
     expect(resolved.roles.rerank).toBe('http://localhost:8080/rerank');
     expect(resolved.roles.expand).toBeTruthy();
@@ -96,6 +99,25 @@ describe('retrieval model role resolution', () => {
     expect(resolved.preset).toBe(DEFAULT_RETRIEVAL_PRESET);
     expect(resolved.requestedPreset).toBe('not-real');
     expect(resolved.roles.embed).toBe(DEFAULT_EMBEDDING_MODEL);
+  });
+
+  test('keeps old gno-prefixed preset names as compatibility aliases', () => {
+    expect(resolveRetrievalModels(config({ models: { preset: 'gno-compact' } })).preset).toBe(
+      'slim',
+    );
+    expect(resolveRetrievalModels(config({ models: { preset: 'gno-balanced' } })).preset).toBe(
+      'balanced',
+    );
+    expect(resolveRetrievalModels(config({ models: { preset: 'gno-quality' } })).preset).toBe(
+      'quality',
+    );
+  });
+
+  test('uses the Qwen embedding model card context window for GGUF embeddings', () => {
+    const config = getEmbeddingModelConfig(DEFAULT_EMBEDDING_MODEL);
+
+    expect(config.dim).toBe(1024);
+    expect(config.contextWindow).toBe(32_768);
   });
 
   test('explicit legacy embeddings.model overrides the default embed role compatibility layer', () => {

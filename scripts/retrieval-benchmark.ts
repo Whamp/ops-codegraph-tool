@@ -107,7 +107,7 @@ const DEFAULT_MODEL = 'nomic-v1.5';
 const CURRENT_DEFAULT_MODEL_URI = 'nomic-ai/nomic-embed-text-v1.5';
 const MINILM_MODEL_URI = 'Xenova/all-MiniLM-L6-v2';
 const JINA_CODE_MODEL_URI = 'Xenova/jina-embeddings-v2-base-code';
-const GNO_COMPACT_PRESET = 'gno-compact';
+const GNO_SLIM_TUNED_PRESET = 'slim-tuned';
 const GNO_QWEN_EMBED_URI = 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf';
 
 export const BENCHMARK_MODEL_PRESETS: BenchmarkModelPreset[] = [
@@ -130,11 +130,11 @@ export const BENCHMARK_MODEL_PRESETS: BenchmarkModelPreset[] = [
     notes: 'Existing code-focused transformer option.',
   },
   {
-    id: 'gno-qwen-compact',
-    label: 'GNO/Qwen compact preset embed role',
+    id: 'gno-qwen-slim-tuned',
+    label: 'GNO slim-tuned preset embed role',
     modelUri: GNO_QWEN_EMBED_URI,
-    rolePreset: GNO_COMPACT_PRESET,
-    notes: 'Qwen GGUF embedding path from the GNO-inspired preset registry.',
+    rolePreset: GNO_SLIM_TUNED_PRESET,
+    notes: 'Qwen GGUF embedding path from the GNO-aligned preset registry.',
   },
 ];
 

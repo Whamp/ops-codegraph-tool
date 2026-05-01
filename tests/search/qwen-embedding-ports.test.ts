@@ -59,7 +59,7 @@ describe('Qwen embedding compatibility formatting', () => {
 
 describe('model URI parsing, GGUF validation, and download policy', () => {
   test('built-in GNO-inspired preset role URIs use explicit GGUF filenames', () => {
-    for (const presetName of ['gno-compact', 'gno-balanced', 'gno-quality'] as const) {
+    for (const presetName of ['slim-tuned', 'slim', 'balanced', 'quality'] as const) {
       const preset = RETRIEVAL_MODEL_PRESETS[presetName]!;
       for (const uri of Object.values(preset.roles)) {
         expect(uri).toMatch(/^hf:.+\.gguf$/);
@@ -277,12 +277,12 @@ describe('embedding port factory', () => {
     }
   });
 
-  test('creates the built-in GNO compact Qwen embed preset through the GGUF cache path', async () => {
+  test('creates the built-in GNO slim Qwen embed preset through the GGUF cache path', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-preset-cache-'));
     try {
-      const uri = resolveModelRoleUri({ models: { preset: 'gno-compact' } }, 'embed');
+      const uri = resolveModelRoleUri({ models: { preset: 'slim' } }, 'embed');
       expect(uri).toBe('hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf');
-      expect(uri).toBe(RETRIEVAL_MODEL_PRESETS['gno-compact']!.roles.embed);
+      expect(uri).toBe(RETRIEVAL_MODEL_PRESETS.slim!.roles.embed);
 
       const file = ggufFile(tmp, 'Qwen3-Embedding-0.6B-Q8_0.gguf');
       fs.writeFileSync(

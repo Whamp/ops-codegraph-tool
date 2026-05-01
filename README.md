@@ -395,10 +395,10 @@ codegraph cycles --functions   # Function-level cycles
 
 ### Semantic Search
 
-Local embeddings for every function, method, and class — search by natural language. The default retrieval preset is `gno-compact` with the Qwen compact GGUF embedding role; legacy transformer aliases and HTTP embedding backends are documented in the [retrieval workflow guide](docs/guides/retrieval-workflow.md).
+Local embeddings for every function, method, and class — search by natural language. The default retrieval preset is `slim-tuned`, matching GNO’s local model stack with Qwen GGUF embeddings and fine-tuned query expansion; legacy transformer aliases and HTTP embedding backends are documented in the [retrieval workflow guide](docs/guides/retrieval-workflow.md).
 
 ```bash
-codegraph embed                # Build embeddings (default: GNO/Qwen compact GGUF)
+codegraph embed                # Build embeddings (default: GNO slim-tuned / Qwen GGUF)
 codegraph embed --model nomic  # Use a different model
 codegraph search "handle authentication"
 codegraph search "parse config" --min-score 0.4 -n 10

@@ -34,7 +34,7 @@ describe('retrieval benchmark harness', () => {
       'current-default',
       'minilm-baseline',
       'jina-code',
-      'gno-qwen-compact',
+      'gno-qwen-slim-tuned',
     ]);
     expect(output.mode).toBe('mock');
     expect(output.queries).toHaveLength(4);
