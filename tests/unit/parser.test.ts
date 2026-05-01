@@ -36,6 +36,10 @@ describe('isWasmAvailable', () => {
     expect(isWasmAvailable()).toBe(false);
   });
 
+  it('does not register Erlang after removing the flagged grammar dependency', () => {
+    expect(LANGUAGE_REGISTRY.some((entry) => entry.id === 'erlang')).toBe(false);
+  });
+
   it('only checks required grammars (JS, TS, TSX)', () => {
     const spy = vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     isWasmAvailable();

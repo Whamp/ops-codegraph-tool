@@ -104,9 +104,9 @@ No config files, no Docker, no JVM, no API keys, no accounts. Point your agent a
 | **🔬** | **Function-level, not just files** | Traces `handleAuth()` → `validateToken()` → `decryptJWT()` and shows 14 callers across 9 files break if `decryptJWT` changes |
 | **⚡** | **Always-fresh graph** | Three-tier change detection: journal (O(changed)) → mtime+size (O(n) stats) → hash (O(changed) reads). Sub-second rebuilds — agents work with current data |
 | **💥** | **Git diff impact** | `codegraph diff-impact` shows changed functions, their callers, and full blast radius — enriched with historically coupled files from git co-change analysis. Ships with a GitHub Actions workflow |
-| **🌐** | **Multi-language, one graph** | 34 languages in a single graph — JS/TS, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Kotlin, Swift, Scala, Bash, HCL, Elixir, Lua, Dart, Zig, Haskell, OCaml, F#, Gleam, Clojure, Julia, R, Erlang, Solidity, Objective-C, CUDA, Groovy, Verilog — agents don't need per-language tools |
+| **🌐** | **Multi-language, one graph** | 33 languages in a single graph — JS/TS, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Kotlin, Swift, Scala, Bash, HCL, Elixir, Lua, Dart, Zig, Haskell, OCaml, F#, Gleam, Clojure, Julia, R, Solidity, Objective-C, CUDA, Groovy, Verilog — agents don't need per-language tools |
 | **🧠** | **Hybrid search** | BM25 keyword + semantic embeddings fused via RRF — `hybrid` (default), `semantic`, or `keyword` mode; multi-query via `"auth; token; JWT"` |
-| **🔬** | **Dataflow + CFG** | Track how data flows through functions (`flows_to`, `returns`, `mutates`) and visualize intraprocedural control flow graphs for all 34 languages |
+| **🔬** | **Dataflow + CFG** | Track how data flows through functions (`flows_to`, `returns`, `mutates`) and visualize intraprocedural control flow graphs for all 33 languages |
 | **🔓** | **Fully local, zero cost** | No API keys, no accounts, no network calls. Optionally bring your own LLM provider — your code only goes where you choose |
 
 ---
@@ -502,7 +502,6 @@ codegraph registry remove <name>  # Unregister
 | ![Clojure](https://img.shields.io/badge/-Clojure-5881D8?style=flat-square&logo=clojure&logoColor=white) | `.clj`, `.cljs`, `.cljc` | ✓ | ✓ | ✓ | — | — | ✓ |
 | ![Julia](https://img.shields.io/badge/-Julia-9558B2?style=flat-square&logo=julia&logoColor=white) | `.jl` | ✓ | ✓ | ✓ | — | — | ✓ |
 | ![R](https://img.shields.io/badge/-R-276DC3?style=flat-square&logo=r&logoColor=white) | `.r`, `.R` | ✓ | ✓ | ✓ | — | — | ✓ |
-| ![Erlang](https://img.shields.io/badge/-Erlang-A90533?style=flat-square&logo=erlang&logoColor=white) | `.erl`, `.hrl` | ✓ | ✓ | ✓ | — | — | ✓ |
 | ![Solidity](https://img.shields.io/badge/-Solidity-363636?style=flat-square&logo=solidity&logoColor=white) | `.sol` | ✓ | ✓ | ✓ | ✓ | — | ✓ |
 | ![Objective-C](https://img.shields.io/badge/-Objective--C-438EFF?style=flat-square&logoColor=white) | `.m` | ✓ | ✓ | ✓ | ✓ | — | ✓ |
 | ![CUDA](https://img.shields.io/badge/-CUDA-76B900?style=flat-square&logo=nvidia&logoColor=white) | `.cu`, `.cuh` | ✓ | ✓ | ✓ | ✓ | — | ✓ |
@@ -650,7 +649,6 @@ Metrics are normalized per file for cross-version comparability. Times above are
 | cuda | 50.0% | 33.3% | 4 | 4 | 8 | 12 | — |
 | dart | 0.0% | 0.0% | 0 | 0 | 18 | 18 | — |
 | elixir | 0.0% | 0.0% | 0 | 0 | 15 | 15 | — |
-| erlang | 100.0% | 100.0% | 12 | 0 | 0 | 12 | — |
 | fsharp | 0.0% | 0.0% | 0 | 9 | 12 | 12 | — |
 | gleam | 100.0% | 26.7% | 4 | 0 | 11 | 15 | — |
 | go | 100.0% | 69.2% | 9 | 0 | 4 | 13 | 13/14 |

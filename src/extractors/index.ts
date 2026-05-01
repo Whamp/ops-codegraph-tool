@@ -6,7 +6,6 @@ export { extractCSharpSymbols } from './csharp.js';
 export { extractCudaSymbols } from './cuda.js';
 export { extractDartSymbols } from './dart.js';
 export { extractElixirSymbols } from './elixir.js';
-export { extractErlangSymbols } from './erlang.js';
 export { extractFSharpSymbols } from './fsharp.js';
 export { extractGleamSymbols } from './gleam.js';
 export { extractGoSymbols } from './go.js';

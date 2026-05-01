@@ -1360,7 +1360,6 @@ Languages with solid tree-sitter grammars and active communities.
 | Clojure | `.clj`, `.cljs`, `.cljc` | `tree-sitter-clojure` | Third-party | JVM Lisp, active community |
 | Julia | `.jl` | `tree-sitter-julia` | Official | Scientific computing |
 | R | `.r`, `.R` | `tree-sitter-r` | `r-lib/` | Statistical computing, 135K crate downloads; WASM built from repo |
-| Erlang | `.erl`, `.hrl` | `tree-sitter-erlang` | `WhatsApp/` | BEAM VM; WASM built from repo |
 
 ### 7.5 -- Batch 4: Specialized ✅
 
@@ -1374,7 +1373,7 @@ Languages with solid tree-sitter grammars and active communities.
 | Groovy | `.groovy`, `.gvy` | `tree-sitter-groovy` | Third-party | JVM, Gradle build scripts |
 | Verilog/SystemVerilog | `.v`, `.sv` | `tree-sitter-verilog` | Official | HDL, 33K crate downloads |
 
-> For languages where the npm package is name-squatted or missing (R, Erlang), WASM binaries can be built from the grammar repo via `tree-sitter build --wasm`.
+> For languages where the npm package is name-squatted or missing (such as R), WASM binaries can be built from the grammar repo via `tree-sitter build --wasm`.
 
 ---
 

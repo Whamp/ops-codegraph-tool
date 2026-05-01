@@ -51,7 +51,6 @@ import {
   extractCudaSymbols,
   extractDartSymbols,
   extractElixirSymbols,
-  extractErlangSymbols,
   extractFSharpSymbols,
   extractGleamSymbols,
   extractGoSymbols,
@@ -337,13 +336,6 @@ const LANGUAGE_REGISTRY: LanguageRegistryEntry[] = [
     extensions: ['.r', '.R'],
     grammarFile: 'tree-sitter-r.wasm',
     extractor: extractRSymbols,
-    required: false,
-  },
-  {
-    id: 'erlang',
-    extensions: ['.erl', '.hrl'],
-    grammarFile: 'tree-sitter-erlang.wasm',
-    extractor: extractErlangSymbols,
     required: false,
   },
   {

@@ -103,7 +103,6 @@ export type LanguageId =
   | 'clojure'
   | 'julia'
   | 'r'
-  | 'erlang'
   | 'solidity'
   | 'objc'
   | 'cuda'

@@ -103,7 +103,6 @@ const THRESHOLDS: Record<string, { precision: number; recall: number }> = {
   clojure: { precision: 0.0, recall: 0.0 },
   julia: { precision: 0.0, recall: 0.0 },
   r: { precision: 0.0, recall: 0.0 },
-  erlang: { precision: 0.0, recall: 0.0 },
   solidity: { precision: 0.0, recall: 0.0 },
   // New fixture languages — no parser or call resolution yet
   objc: { precision: 0.0, recall: 0.0 },
