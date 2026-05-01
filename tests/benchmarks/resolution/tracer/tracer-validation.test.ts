@@ -61,7 +61,6 @@ const SAME_FILE_THRESHOLDS: Record<string, number> = {
   bash: 0.0, // bash tracer uses DEBUG trap which doesn't capture intra-function calls
   r: 0.0, // Rscript not reliably available across CI platforms
   elixir: 0.5,
-  erlang: 0.5,
   clojure: 0.5,
 
   // JVM — sed-injected CallTracer.traceCall()

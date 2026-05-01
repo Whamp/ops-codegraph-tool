@@ -763,8 +763,8 @@ async function backfillNativeDroppedFiles(ctx: PipelineContext): Promise<void> {
   const existing = new Set(existingRows.map((r) => r.file));
 
   // Restrict backfill to files with an installed WASM grammar. Extensions in
-  // LANGUAGE_REGISTRY without a shipped grammar file (e.g. groovy, erlang on
-  // minimal installs) can't be parsed by either engine, so they're not a
+  // LANGUAGE_REGISTRY without a shipped grammar file (e.g. groovy on minimal
+  // installs) can't be parsed by either engine, so they're not a
   // native regression — excluding them keeps the warn count meaningful.
   const installedExts = getInstalledWasmExtensions();
   const missingRel: string[] = [];

@@ -99,11 +99,6 @@ const TRACERS = {
     cmd: 'elixir',
     tracer: 'elixir-tracer.exs',
   },
-  erlang: {
-    type: 'interpreter',
-    cmd: 'escript',
-    tracer: 'erlang-tracer.escript',
-  },
   julia: {
     type: 'interpreter',
     cmd: 'julia',
