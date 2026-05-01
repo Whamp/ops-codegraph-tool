@@ -30,49 +30,50 @@ describe('models command defaults', () => {
     vi.restoreAllMocks();
   });
 
-  test('shows active GNO retrieval roles before legacy embedding aliases', () => {
+  test('shows active GNO roles and preset before legacy aliases', () => {
     const output = runModelsCommand();
 
-    expect(output).toContain('Active retrieval preset: gno-compact');
-    expect(output).toContain('Active retrieval roles:');
-    expect(output).toContain(
-      'embed   hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
-    );
-    expect(output).toContain(
-      'rerank  hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf',
-    );
-    expect(output).toContain('Retrieval presets:');
-    expect(output).toMatch(/gno-compact\s+\(active\)/);
+    // Preset line
+    expect(output).toContain('Preset: gno-compact');
+
+    // Roles — short form
+    expect(output).toContain('embed    Qwen/Qwen3-Embedding-0.6B-Q8_0.gguf');
+    expect(output).toContain('rerank   ggml-org/qwen3-reranker-0.6b-q8_0.gguf');
+    expect(output).toContain('expand   unsloth/Qwen3-1.7B-Q4_K_M.gguf');
+    expect(output).toContain('gen      unsloth/Qwen3-1.7B-Q4_K_M.gguf');
+
+    // Presets section
+    expect(output).toContain('Presets:');
+    expect(output).toMatch(/gno-compact\s+.*←/);
     expect(output).toContain('gno-balanced');
     expect(output).toContain('gno-quality');
-    expect(output).toContain('Embedding aliases (--model overrides):');
+
+    // Legacy aliases come last
+    expect(output).toContain('Embedding aliases (--model):');
     expect(output).not.toContain('Available embedding models:');
-    expect(output.indexOf('Active retrieval roles:')).toBeLessThan(
-      output.indexOf('Embedding aliases (--model overrides):'),
-    );
+    expect(output.indexOf('Preset:')).toBeLessThan(output.indexOf('Embedding aliases (--model):'));
   });
 
-  test('marks resolved embed overrides without calling legacy aliases the default', () => {
+  test('shows resolved preset when config overrides it', () => {
     const output = runModelsCommand({
       embeddings: { model: 'minilm', llmProvider: null },
       models: { preset: 'gno-balanced' },
     });
 
-    expect(output).toContain('Active retrieval preset: gno-balanced');
-    expect(output).toContain(
-      'embed   hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
-    );
-    expect(output).not.toMatch(/minilm.*\(default\)/);
+    expect(output).toContain('Preset: gno-balanced');
+    expect(output).toContain('embed    Qwen/Qwen3-Embedding-0.6B-Q8_0.gguf');
+    expect(output).not.toMatch(/minilm.*←/);
   });
 
-  test('labels a configured legacy embedding alias as the active embed role', () => {
+  test('labels a configured legacy alias as the active embed', () => {
     const output = runModelsCommand({
       embeddings: { model: 'bge-large', llmProvider: null },
     });
 
-    expect(output).toContain('embed   Xenova/bge-large-en-v1.5');
-    expect(output).toMatch(
-      /bge-large\s+1024d\s+512 ctx\s+Best general retrieval.*\(active embed\)/,
-    );
+    // Role shows the resolved URI
+    expect(output).toContain('embed    Xenova/bge-large-en-v1.5');
+
+    // Alias table marks it
+    expect(output).toMatch(/bge-large\s+1024d\s+512 ctx\s+Best general retrieval.*← active/);
   });
 });
