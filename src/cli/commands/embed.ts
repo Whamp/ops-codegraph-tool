@@ -43,7 +43,7 @@ export const command: CommandDefinition = {
   options: [
     [
       '-m, --model <name>',
-      'Embedding model (default from config: GNO/Qwen compact GGUF). Run `codegraph models` for details',
+      'Embedding model (default from config: GNO slim-tuned / Qwen GGUF). Run `codegraph models` for details',
     ],
     [
       '-s, --strategy <name>',

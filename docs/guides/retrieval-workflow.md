@@ -2,7 +2,7 @@
 
 This guide covers Codegraph's current retrieval workflow for semantic and hybrid search: model roles, embedding, cache policy, query expansion, reranking, stale-vector recovery, and migration from legacy config.
 
-Issue #13 decision: Codegraph now uses the GNO/Qwen compact defaults for all retrieval roles. The default preset is `gno-compact`, and the default embedding role is `hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf`.
+Issue #13 decision: Codegraph now uses GNO’s local model stack for retrieval roles. The default preset is `slim-tuned`, and the default embedding role is `hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf`.
 
 ## Quick workflow
 
@@ -29,17 +29,18 @@ Codegraph resolves retrieval models by role:
 
 Built-in presets are defined in `src/domain/search/models.ts`:
 
-- `gno-compact` — default compact local Qwen/GGUF embedding, rerank, expansion, and generation roles.
-- `codegraph-default` — legacy compatibility preset. It keeps the previous Codegraph embedding default (`nomic-v1.5`) and wires GNO-inspired retrieval roles for the optional stages.
-- `gno-balanced` — Qwen embedding/rerank with a larger expansion/generation role.
-- `gno-quality` — Qwen embedding/rerank with the largest built-in expansion/generation role.
+- `slim-tuned` — default GNO preset: Qwen embedding/rerank, fine-tuned expansion, and Qwen3 1.7B generation (~1GB).
+- `slim` — GNO slim preset: Qwen embedding/rerank with Qwen3 1.7B expansion and generation (~1GB).
+- `balanced` — GNO balanced preset: Qwen embedding/rerank with Qwen2.5 3B expansion and generation (~2GB).
+- `quality` — GNO quality preset: Qwen embedding/rerank with Qwen3 4B expansion and generation (~2.5GB).
+- `codegraph-default` — legacy compatibility preset. It keeps the previous Codegraph embedding default (`nomic-v1.5`) and wires GNO-style retrieval roles for the optional stages.
 
 Configure a preset and role overrides in `.codegraphrc.json`:
 
 ```json
 {
   "models": {
-    "preset": "gno-compact",
+    "preset": "slim-tuned",
     "roles": {
       "embed": "hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf",
       "rerank": "https://reranker.example/v1/rerank"

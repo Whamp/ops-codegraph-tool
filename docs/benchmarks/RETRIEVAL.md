@@ -20,11 +20,11 @@ Compared model lanes:
 
 ## Issue #13 decision summary
 
-Maintainer decision: switch defaults now to the GNO/Qwen compact path for all retrieval roles. `gno-compact` is the default preset, and the default embedding role is `hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf`.
+Maintainer decision: switch defaults now to GNO’s local model stack. `slim-tuned` is the default preset, and the default embedding role is `hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf`.
 
 Review summary from the benchmark lane design and migration assessment:
 
-- **Quality:** the GNO/Qwen compact lane is the target higher-quality code retrieval path and is now preferred over the legacy `nomic-v1.5` baseline; the benchmark continues to keep legacy lanes so regressions can be compared.
+- **Quality:** the GNO/Qwen lane is the target higher-quality code retrieval path and is now preferred over the legacy `nomic-v1.5` baseline; the benchmark continues to keep legacy lanes so regressions can be compared.
 - **Speed:** the compact Qwen GGUF role is the smallest GNO lane and avoids making the balanced/quality generation models the default path. Real speed still depends on local `node-llama-cpp` hardware/runtime.
 - **Install size:** default use includes the `node-llama-cpp` runtime plus the cached Qwen GGUF embedding file. Codegraph still avoids test-time or smoke-benchmark downloads, and explicit legacy transformer aliases remain available for smaller embedding runs.
 - **Migration impact:** existing `.codegraphrc` files with `embeddings.model` such as `nomic-v1.5` continue to override the default embedding role. The `codegraph-default` preset remains available as a legacy compatibility preset.
@@ -57,4 +57,4 @@ Notes:
 - The Qwen/GGUF lane requires the bundled `node-llama-cpp` runtime and a cached GGUF model file for the `hf:` URI, or an explicitly allowed Codegraph GGUF cache download.
 - By default, use `CODEGRAPH_NO_AUTO_DOWNLOAD=1`, `HF_HUB_OFFLINE=1`, or omit `--allow-downloads` to avoid surprise downloads across lanes. To permit Codegraph GGUF model downloads intentionally, pass `--allow-downloads`.
 - The real benchmark currently creates separate document and query embedding ports for the same model so asymmetric input formatting is measured correctly. On GGUF/Qwen runs this can mean two wrappers for one model; plan memory/VRAM accordingly.
-- Issue #13 resolved the default decision in favor of GNO/Qwen compact defaults. Keep this benchmark as regression evidence and run with explicit download/cache policy.
+- Issue #13 resolved the default decision in favor of the GNO/Qwen local retrieval stack. Keep this benchmark as regression evidence and run with explicit download/cache policy.

@@ -39,17 +39,17 @@ describe('embed command model compatibility', () => {
   });
 
   test('routes implicit supported Qwen GGUF preset embed URI through buildEmbeddings', async () => {
-    const config = ctx({ models: { preset: 'gno-compact' } });
+    const config = ctx({ models: { preset: 'slim' } });
 
     expect(resolveModelRoleUri(config.config, 'embed')).toBe(
-      RETRIEVAL_MODEL_PRESETS['gno-compact']!.roles.embed,
+      RETRIEVAL_MODEL_PRESETS.slim!.roles.embed,
     );
 
     await command.execute?.(['.'], { strategy: 'structured' }, config);
 
     expect(buildEmbeddingsMock).toHaveBeenCalledWith(
       expect.any(String),
-      RETRIEVAL_MODEL_PRESETS['gno-compact']!.roles.embed,
+      RETRIEVAL_MODEL_PRESETS.slim!.roles.embed,
       undefined,
       { strategy: 'structured' },
     );
@@ -73,7 +73,7 @@ describe('embed command model compatibility', () => {
         strategy: 'structured',
         model: 'hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf',
       },
-      ctx({ models: { preset: 'gno-compact' } }),
+      ctx({ models: { preset: 'slim' } }),
     );
 
     expect(buildEmbeddingsMock).toHaveBeenCalledWith(

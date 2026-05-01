@@ -64,7 +64,7 @@ export const command: CommandDefinition = {
     }
 
     console.log('\nConfig:');
-    console.log('  .codegraphrc.json → { "models": { "preset": "gno-balanced" } }');
+    console.log('  .codegraphrc.json → { "models": { "preset": "balanced" } }');
     console.log('  codegraph embed [--model <alias-or-uri>] [--strategy <structured|source>]');
     console.log('  codegraph search "query" [--model <alias-or-uri>]\n');
   },

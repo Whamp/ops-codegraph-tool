@@ -34,19 +34,22 @@ describe('models command defaults', () => {
     const output = runModelsCommand();
 
     // Preset line
-    expect(output).toContain('Preset: gno-compact');
+    expect(output).toContain('Preset: slim-tuned');
 
     // Roles — short form
     expect(output).toContain('embed    Qwen/Qwen3-Embedding-0.6B-Q8_0.gguf');
     expect(output).toContain('rerank   ggml-org/qwen3-reranker-0.6b-q8_0.gguf');
-    expect(output).toContain('expand   unsloth/Qwen3-1.7B-Q4_K_M.gguf');
+    expect(output).toContain(
+      'expand   guiltylemon/gno-expansion-auto-entity-lock-default-mix-lr95-f16.gguf',
+    );
     expect(output).toContain('gen      unsloth/Qwen3-1.7B-Q4_K_M.gguf');
 
     // Presets section
     expect(output).toContain('Presets:');
-    expect(output).toMatch(/gno-compact\s+.*←/);
-    expect(output).toContain('gno-balanced');
-    expect(output).toContain('gno-quality');
+    expect(output).toMatch(/slim-tuned\s+.*←/);
+    expect(output).toContain('slim');
+    expect(output).toContain('balanced');
+    expect(output).toContain('quality');
 
     // Legacy aliases come last
     expect(output).toContain('Embedding aliases (--model):');
@@ -57,10 +60,10 @@ describe('models command defaults', () => {
   test('shows resolved preset when config overrides it', () => {
     const output = runModelsCommand({
       embeddings: { model: 'minilm', llmProvider: null },
-      models: { preset: 'gno-balanced' },
+      models: { preset: 'balanced' },
     });
 
-    expect(output).toContain('Preset: gno-balanced');
+    expect(output).toContain('Preset: balanced');
     expect(output).toContain('embed    Qwen/Qwen3-Embedding-0.6B-Q8_0.gguf');
     expect(output).not.toMatch(/minilm.*←/);
   });
