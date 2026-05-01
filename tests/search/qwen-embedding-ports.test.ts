@@ -314,6 +314,38 @@ describe('embedding port factory', () => {
     }
   });
 
+  test('clamps Qwen GGUF inputs to the runtime tokenizer context window', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-gguf-clamp-'));
+    try {
+      const file = ggufFile(tmp, 'Qwen3-Embedding.gguf');
+      const embeddedTexts: string[] = [];
+      const runtimeLoader = vi.fn(async () => ({
+        getLlama: async () => ({
+          loadModel: async () => ({
+            trainContextSize: 6,
+            tokenize: (text: string) => text.split(''),
+            detokenize: (tokens: readonly string[]) => tokens.join(''),
+            createEmbeddingContext: async () => ({
+              getEmbeddingFor: async (text: string) => {
+                embeddedTexts.push(text);
+                if (text.length > 2) throw new Error('context overflow');
+                return { vector: [text.length] };
+              },
+            }),
+          }),
+        }),
+      }));
+
+      const port = await createEmbeddingPort(`file:${file}`, { inputType: 'raw', runtimeLoader });
+      const [vector] = await port.embedBatch(['abcdefghi']);
+
+      expect(Array.from(vector!)).toEqual([2]);
+      expect(embeddedTexts).toEqual(['ab']);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   test('creates Qwen GGUF port from local file without requiring node-llama-cpp until used', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codegraph-factory-'));
     try {

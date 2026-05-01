@@ -44,6 +44,9 @@ type LlamaEmbeddingContext = {
   getEmbeddingFor(text: string): Promise<{ vector: Iterable<number> }>;
 };
 type LlamaEmbeddingModel = {
+  trainContextSize?: number;
+  tokenize?: (text: string) => readonly unknown[];
+  detokenize?: (tokens: readonly unknown[]) => string;
   createEmbeddingContext(): Promise<LlamaEmbeddingContext>;
   dispose?: () => Promise<void> | void;
 };
@@ -79,7 +82,7 @@ class NodeLlamaCppEmbeddingPort implements EmbeddingPort {
     const context = await this.getContext();
     const vectors: Float32Array[] = [];
     for (const text of texts) {
-      const embedding = await context.getEmbeddingFor(text);
+      const embedding = await context.getEmbeddingFor(this.clampToModelContext(text));
       vectors.push(new Float32Array(Array.from(embedding.vector)));
     }
     return vectors;
@@ -89,6 +92,27 @@ class NodeLlamaCppEmbeddingPort implements EmbeddingPort {
     await this.model?.dispose?.();
     this.model = undefined;
     this.context = undefined;
+  }
+
+  private clampToModelContext(text: string): string {
+    const model = this.model;
+    const rawLimit = model?.trainContextSize;
+    const tokenize = model?.tokenize;
+    const detokenize = model?.detokenize;
+    if (
+      typeof rawLimit !== 'number' ||
+      !Number.isFinite(rawLimit) ||
+      rawLimit <= 0 ||
+      !tokenize ||
+      !detokenize
+    ) {
+      return text;
+    }
+
+    const limit = Math.max(1, Math.floor(rawLimit) - 4);
+    const tokens = tokenize(text);
+    if (tokens.length <= limit) return text;
+    return detokenize(tokens.slice(0, limit));
   }
 
   private async getContext(): Promise<{
